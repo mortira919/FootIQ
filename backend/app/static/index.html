@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FootIQ — проверка задач</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.45 system-ui, sans-serif; background: #101412; color: #e7efe9; }
+    header, main { max-width: 1180px; margin: 0 auto; padding: 20px; }
+    header { padding-bottom: 0; }
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    .lead { margin: 0; color: #b7c4bb; }
+    .grid { display: grid; grid-template-columns: 560px 1fr; gap: 16px; }
+    .card { background: #1a211e; border: 1px solid #2c3832; border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+    h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: #9fb0a6; }
+    label { display: block; margin: 8px 0 4px; }
+    input, select, button { font: inherit; }
+    input, select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #3a4a42; background: #101412; color: inherit; }
+    .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+    button { border: 0; border-radius: 8px; padding: 8px 12px; background: #1f8a5b; color: white; cursor: pointer; }
+    button.ghost { background: #2a3832; }
+    canvas { width: 100%; background: #0c6b49; border-radius: 14px; cursor: crosshair; display: block; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+    .task { margin: 10px 0; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; font-size: 13px; }
+    .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+    .verdict { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: #101412; display: none; }
+    .verdict b { font-size: 18px; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 12px/1.4 ui-monospace, monospace; background: #0c0f0e; border-radius: 8px; padding: 10px; min-height: 80px; }
+    .ok { color: #7dffa8; font-weight: 700; }
+    .bad { color: #ff8d8d; font-weight: 700; }
+    .check { width: auto; }
+    #who { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>FootIQ — проверка задач</h1>
+    <p class="lead">Атака идёт вверх, к воротам соперника. Кликни, куда открыться или отдать пас. Справа — живой запрос и ответ.</p>
+  </header>
+  <main class="grid">
+    <section>
+      <div class="card">
+        <h2>1. Сессия</h2>
+        <label for="name">Имя</label>
+        <input id="name" value="Якоб" />
+        <div class="row">
+          <button id="login">Войти</button>
+          <button id="me" class="ghost">Кто я</button>
+          <button id="history" class="ghost">История</button>
+          <button id="radar" class="ghost">Радар</button>
+          <button id="board" class="ghost">Топ</button>
+        </div>
+        <p id="who">Токена нет</p>
+      </div>
+      <div class="card">
+        <h2>2. Кем играешь</h2>
+        <select id="position"></select>
+        <div class="row"><button id="save-position">Сохранить позицию</button></div>
+      </div>
+      <div class="card">
+        <h2>3. Задача</h2>
+        <div class="row">
+          <button id="next">Случайная</button>
+          <button id="daily" class="ghost">Задача дня</button>
+          <button id="close-day" class="ghost">Закрыть день</button>
+          <button id="replay" class="ghost">Ещё раз</button>
+          <label class="check"><input id="mirrored" type="checkbox" /> зеркало</label>
+        </div>
+        <p class="task" id="puzzle-title">Сохрани позицию «Опорный полузащитник» и загрузи задачу.</p>
+        <canvas id="pitch" width="408" height="630"></canvas>
+        <div class="legend">
+          <span><i class="swatch" style="background:#f4f7f5"></i>свои</span>
+          <span><i class="swatch" style="background:#1b1f1d;border:1px solid #888"></i>соперник</span>
+          <span><i class="swatch" style="background:#3ddc84"></i>зелёная зона</span>
+          <span><i class="swatch" style="background:#f2f2f2;border-radius:50%"></i>мяч</span>
+        </div>
+        <p id="point">Кликни точку на поле.</p>
+        <div class="row">
+          <button id="send">Проверить клик</button>
+          <button id="gold" class="ghost">Центр золота</button>
+          <button id="silver" class="ghost">Безопасная точка</button>
+          <button id="shadow" class="ghost">В тень</button>
+          <button id="timeout" class="ghost">Не успел</button>
+        </div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+      <div class="card">
+        <h2>4. Видеоразбор</h2>
+        <div class="row"><button id="video-next">Получить разбор</button></div>
+        <p class="task" id="video-title">Один разбор в день. Сначала открой задачу, потом выбери вариант и напиши, почему.</p>
+        <div class="row" id="video-options"></div>
+        <div class="row" id="video-chips"></div>
+        <label for="video-text">Почему</label>
+        <textarea id="video-text" rows="3" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #3a4a42;background:#101412;color:inherit;"></textarea>
+        <div class="row"><button id="video-send">Отправить тренеру</button></div>
+        <div class="verdict" id="video-verdict"></div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Обмен</h2>
+      <p id="status">Ожидание</p>
+      <pre id="log">Здесь появятся запрос и ответ.</pre>
+    </section>
+  </main>
+  <script>
+    const POS = {
+      gk: "Вратарь", cb: "Центральный защитник", "rb/lb": "Крайний защитник",
+      dm: "Опорный полузащитник", cm: "Центральный полузащитник", am: "Атакующий полузащитник",
+      "lm/rm": "Крайний полузащитник", "lw/rw": "Вингер", st: "Нападающий", ss: "Оттянутый нападающий"
+    };
+    const REASON = {
+      optimal: "Золото", safe: "Серебро", timeout: "Не успел", out: "Мяч за полем",
+      noReceiver: "Некому принять", offside: "Офсайд", cone: "Конус отбора",
+      shadow: "Тень опеки", marked: "Плотная опека"
+    };
+    const tokenKey = "footiq_token";
+    let token = sessionStorage.getItem(tokenKey) || "";
+    let puzzleFromDaily = false;
+    let videoPuzzle = null;
+    let videoOption = "C";
+    let point = null;
+    let cam = { minX: 0, minY: 0, maxX: 68, maxY: 105 };
+    let anim = 0;
+    let progress = 1;
+    const pitch = document.getElementById("pitch");
+    const ctx = pitch.getContext("2d");
+    const $ = (id) => document.getElementById(id);
+
+    function mx(x) { return $("mirrored").checked ? 68 - x : x; }
+    function toCanvas(x, y) {
+      return [(mx(x) / 68) * pitch.width, (y / 105) * pitch.height];
+    }
+    function screen(x, y) {
+      return [(x / 68) * pitch.width, (y / 105) * pitch.height];
+    }
+    function played(x, y) {
+      return { x: $("mirrored").checked ? 68 - x : x, y };
+    }
+    function centroid(polygon) {
+      const s = polygon.reduce((a, p) => [a[0] + p[0], a[1] + p[1]], [0, 0]);
+      return [s[0] / polygon.length, s[1] / polygon.length];
+    }
+    function catmull(path, t) {
+      if (path.length === 1) return path[0];
+      const scaled = Math.min(0.9999, Math.max(0, t)) * (path.length - 1);
+      const i = Math.min(path.length - 2, Math.floor(scaled));
+      const u = scaled - i;
+      const p0 = path[Math.max(0, i - 1)];
+      const p1 = path[i];
+      const p2 = path[i + 1];
+      const p3 = path[Math.min(path.length - 1, i + 2)];
+      const axis = (a, b, c, d) => 0.5 * ((2 * b) + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u * u + (-a + 3 * b - 3 * c + d) * u * u * u);
+      return [axis(p0[0], p1[0], p2[0], p3[0]), axis(p0[1], p1[1], p2[1], p3[1])];
+    }
+
+    function ahead(pos) { return [pos[0], pos[1] - 2]; }
+
+    function ballAt(scene, t) {
+      const owners = scene.ball;
+      if (owners.length === 1) return ahead(catmull(scene.mates[owners[0]].path, t));
+      const scaled = Math.min(0.9999, t) * (owners.length - 1);
+      const i = Math.min(owners.length - 2, Math.floor(scaled));
+      const u = scaled - i;
+      const from = owners[i];
+      const to = owners[i + 1];
+      if (from === to) return ahead(catmull(scene.mates[from].path, t));
+      const a = ahead(catmull(scene.mates[from].path, i / (owners.length - 1)));
+      const b = ahead(catmull(scene.mates[to].path, (i + 1) / (owners.length - 1)));
+      return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+    }
+
+    function fit() {
+      const scene = puzzle.scene_data;
+      let minX = 68, maxX = 0, minY = 105, maxY = 0;
+      const take = (x, y) => {
+        const X = mx(x);
+        minX = Math.min(minX, X); maxX = Math.max(maxX, X);
+        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      };
+      for (const player of [...scene.mates, ...scene.opps]) {
+        if (player.number === 1 && scene.opps.includes(player)) continue;
+        player.path.forEach((p) => take(p[0], p[1]));
+      }
+      puzzle.optimal_zone_polygon.forEach((p) => take(p[0], p[1]));
+      cam = {
+        minX: Math.max(0, minX - 8),
+        maxX: Math.min(68, maxX + 8),
+        minY: Math.max(0, minY - 8),
+        maxY: Math.min(105, maxY + 8)
+      };
+    }
+
+    function drawPitch() {
+      ctx.fillStyle = "#0f7a52";
+      ctx.fillRect(0, 0, pitch.width, pitch.height);
+      ctx.strokeStyle = "rgba(255,255,255,.28)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(10, 10, pitch.width - 20, pitch.height - 20);
+      ctx.beginPath();
+      const mid = toCanvas(34, 52.5);
+      ctx.moveTo(10, mid[1]);
+      ctx.lineTo(pitch.width - 10, mid[1]);
+      ctx.stroke();
+    }
+
+    function drawFrame(t) {
+      ctx.clearRect(0, 0, pitch.width, pitch.height);
+      drawPitch();
+      if (!puzzle) return;
+      const scene = puzzle.scene_data;
+      if (t >= 1) {
+        ctx.beginPath();
+        puzzle.optimal_zone_polygon.forEach((p, i) => {
+          const [cx, cy] = toCanvas(p[0], p[1]);
+          if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+        });
+        ctx.closePath();
+        ctx.fillStyle = "rgba(186, 255, 214, .28)";
+        ctx.strokeStyle = "rgba(220, 255, 232, .85)";
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+      }
+      scene.opps.forEach((player) => chip(catmull(player.path, t), "#17211c", "#f4f7f5", false, player.number));
+      scene.mates.forEach((player, index) => chip(catmull(player.path, t), "#f7faf8", "#102018", index === scene.me, player.number));
+      const ball = ballAt(scene, t);
+      const [bx, by] = toCanvas(ball[0], ball[1]);
+      ctx.beginPath();
+      ctx.fillStyle = "#ffffff";
+      ctx.arc(bx, by, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#d7d7d7";
+      ctx.stroke();
+      if (point && t >= 1) {
+        const [px, py] = screen(point.x, point.y);
+        ctx.strokeStyle = "#ffe14a";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, 9, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    function chip(pos, fill, text, mine, number) {
+      const [cx, cy] = toCanvas(pos[0], pos[1]);
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,.35)";
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.fillStyle = fill;
+      ctx.arc(cx, cy, mine ? 16 : 13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      if (mine) {
+        ctx.beginPath();
+        ctx.strokeStyle = "#ffe14a";
+        ctx.lineWidth = 3;
+        ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "#ffe14a";
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("ты", cx, cy - 28);
+      }
+      ctx.fillStyle = text;
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(number), cx, cy);
+    }
+
+    function draw() {
+      cancelAnimationFrame(anim);
+      progress = 1;
+      if (puzzle) fit();
+      drawFrame(1);
+    }
+
+    function play() {
+      cancelAnimationFrame(anim);
+      if (!puzzle) return draw();
+      fit();
+      point = null;
+      const duration = puzzle.freeze_point_ms || 3000;
+      const start = performance.now() + 400;
+      const frame = (now) => {
+        progress = Math.min(1, Math.max(0, (now - start) / duration));
+        drawFrame(progress);
+        if (progress < 1) anim = requestAnimationFrame(frame);
+      };
+      drawFrame(0);
+      anim = requestAnimationFrame(frame);
+    }
+
+    async function api(method, path, body) {
+      const headers = {};
+      if (token) headers.Authorization = "Bearer " + token;
+      let payload;
+      if (body !== undefined) {
+        headers["Content-Type"] = "application/json";
+        payload = JSON.stringify(body);
+      }
+      const response = await fetch(path, { method, headers, body: payload });
+      const text = await response.text();
+      let pretty = text;
+      try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (_) {}
+      $("status").textContent = response.status + " " + response.statusText;
+      $("status").className = response.ok ? "ok" : "bad";
+      $("log").textContent = method + " " + path + (payload ? "\n" + payload : "") + "\n\n" + response.status + "\n" + pretty;
+      if (!response.ok) throw new Error(pretty);
+      return text ? JSON.parse(text) : null;
+    }
+
+    function show(data) {
+      const box = $("verdict");
+      box.style.display = "block";
+      const who = data.culprit_number ? " Соперник №" + data.culprit_number + "." : "";
+      box.innerHTML = "<b>" + (REASON[data.reason] || data.outcome) + "</b><div>" + data.lesson + who + "</div><div>ELO " + (data.elo_delta > 0 ? "+" : "") + data.elo_delta + "</div>";
+    }
+
+    async function send(target, mode) {
+      if (!puzzle) return;
+      point = target;
+      if (target) $("point").textContent = "Точка " + target.x.toFixed(1) + ", " + target.y.toFixed(1);
+      draw();
+      const data = await api("POST", "/attempts/polygon/validate", {
+        puzzle_id: puzzle.id,
+        mirrored: $("mirrored").checked,
+        mode: mode || "polygon",
+        target: target && { x: Number(target.x.toFixed(2)), y: Number(target.y.toFixed(2)) }
+      });
+      show(data);
+      if (data.streak_count !== undefined) {
+        const current = $("who").textContent.replace(/ · серия \d+/, "");
+        $("who").textContent = current + " · серия " + data.streak_count;
+      }
+    }
+
+    function loadPuzzle(data) {
+      puzzle = data;
+      $("mirrored").checked = !!data.mirrored;
+      const scene = data.scene_data;
+      const me = scene.mates[scene.me];
+      const mode = scene.ball.at(-1) === scene.me ? "У тебя мяч: отдай пас." : "Мяч у партнёра: откройся в зону.";
+      $("puzzle-title").textContent = "Ты номер " + me.number + ". " + data.title + ". " + mode;
+      $("verdict").style.display = "none";
+      point = null;
+      play();
+    }
+
+    function showUser(user) {
+      const streak = user.streak_count || 0;
+      const lock = user.position_changed_on ? " · смена была " + user.position_changed_on : "";
+      $("who").textContent = (user.rank || "Новичок") + " · ELO " + user.overall_elo + " · серия " + streak + lock;
+    }
+    $("login").onclick = async () => {
+      const data = await api("POST", "/auth/dev-login", { name: $("name").value });
+      token = data.access_token;
+      sessionStorage.setItem(tokenKey, token);
+      showUser(data.user);
+      if (data.user.primary_position) $("position").value = data.user.primary_position;
+    };
+    $("me").onclick = async () => showUser(await api("GET", "/users/me"));
+    $("history").onclick = async () => {
+      const data = await api("GET", "/users/me/attempts");
+      const lines = data.attempts.map((item) => {
+        const delta = item.elo_delta > 0 ? "+" + item.elo_delta : String(item.elo_delta);
+        return item.created_at + " · " + item.mode + " · " + item.reason + " · ELO " + delta;
+      });
+      $("who").textContent = lines.length ? lines.join("\n") : "Попыток пока нет";
+    };
+    $("radar").onclick = async () => {
+      const data = await api("GET", "/users/me/radar");
+      const lines = data.axes.map((axis) => axis.label + ": " + axis.value);
+      $("who").textContent = lines.join("\n");
+    };
+    $("board").onclick = async () => {
+      const data = await api("GET", "/leaderboards/global");
+      const lines = data.rows.slice(0, 10).map((row, index) => (index + 1) + ". " + row.name + " · " + Math.round(row.overall_elo));
+      $("who").textContent = lines.length ? lines.join("\n") : "Таблица пуста";
+    };
+    $("save-position").onclick = async () => {
+      await api("PATCH", "/users/me/position", { primary_position: $("position").value });
+    };
+    $("next").onclick = async () => {
+      puzzleFromDaily = false;
+      loadPuzzle(await api("GET", "/puzzles/next"));
+    };
+    $("daily").onclick = async () => {
+      puzzleFromDaily = true;
+      loadPuzzle(await api("GET", "/puzzles/daily"));
+    };
+    $("close-day").onclick = () => {
+      if (!puzzle || !puzzleFromDaily) return;
+      const [x, y] = centroid(puzzle.optimal_zone_polygon);
+      return send(played(x, y), "daily");
+    };
+    $("replay").onclick = () => play();
+    $("mirrored").onchange = () => { point = null; puzzle ? play() : draw(); };
+    $("send").onclick = () => point && send(point);
+    $("gold").onclick = () => {
+      const [x, y] = centroid(puzzle.optimal_zone_polygon);
+      return send(played(x, y));
+    };
+    $("silver").onclick = () => send(played(20, 63));
+    $("shadow").onclick = () => send(played(30, 58));
+    $("timeout").onclick = () => send(null);
+    $("video-next").onclick = async () => {
+      videoPuzzle = await api("GET", "/puzzles/video/next");
+      $("video-title").textContent = videoPuzzle.title + ". Выбери вариант и объясни в одном-двух предложениях.";
+      $("video-options").innerHTML = videoPuzzle.options.map((option) =>
+        `<button type="button" class="ghost" data-option="${option.id}">${option.id}. ${option.label}</button>`
+      ).join("");
+      $("video-chips").innerHTML = videoPuzzle.chips.map((chip) =>
+        `<button type="button" class="ghost" data-chip="${chip}">${chip}</button>`
+      ).join("");
+      $("video-verdict").style.display = "none";
+    };
+    $("video-options").onclick = (event) => {
+      const option = event.target.dataset.option;
+      if (!option) return;
+      videoOption = option;
+      $("video-title").textContent = "Выбран вариант " + option;
+    };
+    $("video-chips").onclick = (event) => {
+      const chip = event.target.dataset.chip;
+      if (!chip) return;
+      const field = $("video-text");
+      field.value = (field.value + " " + chip).trim();
+    };
+    $("video-send").onclick = async () => {
+      if (!videoPuzzle) return;
+      const data = await api("POST", "/attempts/video/answer", {
+        puzzle_id: videoPuzzle.id,
+        option: videoOption,
+        text: $("video-text").value,
+        persona: "Ассистент"
+      });
+      const lines = data.checklist.map((item) => (item.ok ? "✓ " : "• ") + item.text).join("<br>");
+      const box = $("video-verdict");
+      box.style.display = "block";
+      box.innerHTML = "<b>" + data.score + "/10</b><div>" + data.coach_reply + "</div><div>" + lines + "</div><div>ELO " + (data.elo_delta > 0 ? "+" : "") + data.elo_delta + "</div>";
+    };
+    pitch.onclick = (event) => {
+      const rect = pitch.getBoundingClientRect();
+      const x = cam.minX + ((event.clientX - rect.left) / rect.width) * (cam.maxX - cam.minX);
+      const y = cam.minY + ((event.clientY - rect.top) / rect.height) * (cam.maxY - cam.minY);
+      point = { x, y };
+      $("point").textContent = "Точка " + x.toFixed(1) + ", " + y.toFixed(1);
+      draw();
+    };
+
+    async function boot() {
+      const data = await api("GET", "/positions");
+      $("position").innerHTML = data.positions.map((code) => `<option value="${code}">${POS[code] || code}</option>`).join("");
+      $("position").value = "dm";
+      $("who").textContent = token ? "Токен есть" : "Токена нет";
+      draw();
+    }
+    boot();
+  </script>
+</body>
+</html>
