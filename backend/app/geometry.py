@@ -83,25 +83,18 @@ def _shadow_polygon(ball, opp):
 
 
 def _cone_hit(ball, target, opp):
-    to_target = _sub(target, ball)
-    travel = _len(to_target)
-    if travel <= 2:
-        return None
+    # Как evaluate() в tactics.dart клиента: шаг 0,5 м от 2 м до длины паса, саму точку паса отдельно не проверяем.
+    travel = _dist(target, ball)
     direction = _sub(ball, opp)
     direction_len = _len(direction)
-    if direction_len == 0:
-        return None
-    direction = (direction[0] / direction_len, direction[1] / direction_len)
+    direction = (0.0, 1.0) if direction_len < 0.01 else (direction[0] / direction_len, direction[1] / direction_len)
     radius = min(6.0, max(3.0, 3 + 0.1 * _dist(opp, ball)))
-    step = (to_target[0] / travel, to_target[1] / travel)
     distance = 2.0
-    while distance < travel - 1e-9:
-        point = _add(ball, _mul(step, distance))
+    while distance <= travel:
+        point = _add(ball, _mul(_sub(target, ball), distance / travel))
         if _cone_contains(point, opp, direction, radius):
             return distance, point
         distance += 0.5
-    if _cone_contains(target, opp, direction, radius):
-        return travel, target
     return None
 
 
