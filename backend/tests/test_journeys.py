@@ -282,6 +282,8 @@ class Journeys(unittest.TestCase):
         self.assertEqual(first.status_code, 200, first.text)
         self.assertEqual(second.status_code, 200, second.text)
         self.assertEqual(second.json()["persona"], "Пеп")
+        moved = self.client.patch("/users/me/position", headers=auth(token), json={"primary_position": "cm"})
+        self.assertEqual(moved.status_code, 200, moved.text)
         with connect() as connection:
             connection.execute("UPDATE users SET pro_until = '2000-01-01' WHERE id = ?", (user["id"],))
         self.assertEqual(self.me(token)["subscription_tier"], "free")
