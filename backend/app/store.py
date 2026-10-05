@@ -3,6 +3,7 @@ from app.position_rule import can_change_position
 from app.rank import rank_for
 from app.streak import advance_streak, visible_streak
 import json
+import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -11,7 +12,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "data" / "footiq.sqlite"
+DB_PATH = Path(os.environ.get("FOOTIQ_DB", ROOT / "data" / "footiq.sqlite"))
 
 POSITIONS = ("gk", "cb", "rb/lb", "dm", "cm", "am", "lm/rm", "lw/rw", "st", "ss")
 DEFAULT_TZ = "Asia/Almaty"
@@ -22,7 +23,11 @@ class QuotaExceeded(Exception):
     pass
 
 
-def _zone(name: str | None) -> ZoneInfo:
+def _zone(name: str | None):
+    try:
+        return timezone(timedelta(minutes=int(name)))
+    except (TypeError, ValueError):
+        pass
     try:
         return ZoneInfo(name or DEFAULT_TZ)
     except Exception:
@@ -133,6 +138,20 @@ def init_db() -> None:
             );
             """
         )
+        for column in ("provider", "sub", "email", "display_name", "coach", "apple_refresh"):
+            _add_column(connection, "users", column, "TEXT")
+        _add_column(connection, "attempts", "position", "TEXT")
+        _add_column(connection, "sessions", "kind", "TEXT NOT NULL DEFAULT 'dev'")
+        connection.executescript(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS users_identity ON users(provider, sub);
+            CREATE TABLE IF NOT EXISTS refresh_tokens (
+                token TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
         cache_columns = [item[1] for item in connection.execute("PRAGMA table_info(semantic_cache)")]
         if cache_columns and "user_id" not in cache_columns:
             connection.execute("DROP TABLE semantic_cache")
@@ -155,6 +174,8 @@ def login_dev(name: str) -> tuple[str, sqlite3.Row]:
     cleaned = name.strip()
     with connect() as connection:
         row = connection.execute("SELECT * FROM users WHERE name = ?", (cleaned,)).fetchone()
+        if row is not None and row["provider"]:
+            raise ValueError("Это имя занято игроком приложения")
         if row is None:
             user_id = str(uuid.uuid4())
             connection.execute("INSERT INTO users (id, name) VALUES (?, ?)", (user_id, cleaned))
@@ -171,7 +192,7 @@ def user_from_token(token: str) -> sqlite3.Row | None:
             """
             SELECT users.* FROM sessions
             JOIN users ON users.id = sessions.user_id
-            WHERE sessions.token = ?
+            WHERE sessions.token = ? AND sessions.kind = 'dev'
             """,
             (token,),
         ).fetchone()
@@ -188,7 +209,7 @@ def set_position(user_id: str, position: str) -> tuple[sqlite3.Row, str | None]:
         if not allowed:
             return row, opens
         stamp = changed_on
-        if row["primary_position"] != position:
+        if row["primary_position"] not in (None, position):
             stamp = today.isoformat()
         connection.execute(
             "UPDATE users SET primary_position = ?, position_changed_on = ? WHERE id = ?",
@@ -248,13 +269,24 @@ def locked():
         connection.close()
 
 
-def _insert_attempt(connection, attempt_id, user_id, puzzle_id, x, y, outcome, reason, mirrored, mode, elo_delta) -> None:
+STAMP = "%Y-%m-%d %H:%M:%S.%f"
+
+
+def now_stamp() -> str:
+    return datetime.now(timezone.utc).strftime(STAMP)
+
+
+def _insert_attempt(
+    connection, attempt_id, user_id, puzzle_id, x, y, outcome, reason, mirrored, mode, elo_delta, position=None
+) -> None:
     connection.execute(
         """
-        INSERT INTO attempts (id, user_id, puzzle_id, action, x, y, outcome, reason, mirrored, mode, elo_delta)
-        VALUES (?, ?, ?, 'target', ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO attempts (
+            id, user_id, puzzle_id, action, x, y, outcome, reason, mirrored, mode, elo_delta, position, created_at
+        )
+        VALUES (?, ?, ?, 'target', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (attempt_id, user_id, puzzle_id, x, y, outcome, reason, int(bool(mirrored)), mode, elo_delta),
+        (attempt_id, user_id, puzzle_id, x, y, outcome, reason, int(bool(mirrored)), mode, elo_delta, position, now_stamp()),
     )
 
 
@@ -317,7 +349,7 @@ def commit_polygon(
         updated, delta = _glicko(connection, user_id, position, difficulty, score)
         if mode == "daily":
             updated = _mark_daily(connection, updated)
-        _insert_attempt(connection, attempt_id, user_id, puzzle_id, x, y, outcome, reason, mirrored, mode, delta)
+        _insert_attempt(connection, attempt_id, user_id, puzzle_id, x, y, outcome, reason, mirrored, mode, delta, position)
     return updated, delta, attempt_id
 
 
@@ -328,7 +360,9 @@ def commit_rush(user_id, position, difficulty, score, outcome) -> tuple[sqlite3.
         if _count_mode(connection, user_id, "rush-result", row) >= 2:
             raise QuotaExceeded("Лимит Free: 2 спринта в день")
         updated, delta = _glicko(connection, user_id, position, difficulty, score)
-        _insert_attempt(connection, attempt_id, user_id, "rush", None, None, outcome, "rush", False, "rush-result", delta)
+        _insert_attempt(
+            connection, attempt_id, user_id, "rush", None, None, outcome, "rush", False, "rush-result", delta, position
+        )
     return updated, delta, attempt_id
 
 
@@ -343,11 +377,14 @@ def commit_video(user_id, position, difficulty, score, puzzle_id, option, text, 
         connection.execute(
             """
             INSERT INTO attempts (
-                id, user_id, puzzle_id, action, outcome, reason, mode, elo_delta, user_text, verdict
+                id, user_id, puzzle_id, action, outcome, reason, mode, elo_delta, user_text, verdict, position, created_at
             )
-            VALUES (?, ?, ?, 'answer', 'video', ?, 'video', ?, ?, ?)
+            VALUES (?, ?, ?, 'answer', 'video', ?, 'video', ?, ?, ?, ?, ?)
             """,
-            (attempt_id, user_id, puzzle_id, option, delta, text, json.dumps(verdict, ensure_ascii=False)),
+            (
+                attempt_id, user_id, puzzle_id, option, delta, text,
+                json.dumps(verdict, ensure_ascii=False), position, now_stamp(),
+            ),
         )
     return updated, delta, attempt_id
 
@@ -376,7 +413,7 @@ def attempts_for_radar(user_id: str) -> list[sqlite3.Row]:
     with connect() as connection:
         return connection.execute(
             """
-            SELECT puzzle_id, outcome, mode, verdict
+            SELECT puzzle_id, outcome, mode, verdict, position
             FROM attempts
             WHERE user_id = ? AND outcome != 'start'
             """,
@@ -497,3 +534,244 @@ def public_user(row: sqlite3.Row) -> dict:
         "position_changed_on": row["position_changed_on"] if "position_changed_on" in row.keys() else None,
         "country": row["country"] if "country" in row.keys() else None,
     }
+
+
+
+ACCESS_TTL = 3600
+REFRESH_TTL = 30 * 86400
+
+
+def _user(connection, user_id: str) -> sqlite3.Row:
+    return connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+
+def user_row(user_id: str) -> sqlite3.Row:
+    with connect() as connection:
+        return _user(connection, user_id)
+
+
+def _issue(connection, user_id: str) -> tuple[str, str]:
+    connection.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    connection.execute("DELETE FROM refresh_tokens WHERE user_id = ?", (user_id,))
+    access, refresh = uuid.uuid4().hex, uuid.uuid4().hex
+    connection.execute("INSERT INTO sessions (token, user_id, kind) VALUES (?, ?, 'v1')", (access, user_id))
+    connection.execute("INSERT INTO refresh_tokens (token, user_id) VALUES (?, ?)", (refresh, user_id))
+    return access, refresh
+
+
+def login_provider(provider: str, sub: str, email: str | None, name: str | None) -> tuple[str, str, sqlite3.Row]:
+    with locked() as connection:
+        row = connection.execute("SELECT * FROM users WHERE provider = ? AND sub = ?", (provider, sub)).fetchone()
+        if row is None:
+            user_id = str(uuid.uuid4())
+            connection.execute(
+                """
+                INSERT INTO users (id, name, provider, sub, email, display_name, timezone)
+                VALUES (?, ?, ?, ?, ?, ?, '0')
+                """,
+                (user_id, f"{provider}:{user_id}", provider, sub, email, name),
+            )
+        else:
+            user_id = row["id"]
+            connection.execute(
+                "UPDATE users SET email = COALESCE(?, email), display_name = COALESCE(display_name, ?) WHERE id = ?",
+                (email, name, user_id),
+            )
+        access, refresh = _issue(connection, user_id)
+        return access, refresh, _user(connection, user_id)
+
+
+def refresh_session(token: str) -> tuple[str, str] | None:
+    with locked() as connection:
+        found = connection.execute(
+            "SELECT user_id FROM refresh_tokens WHERE token = ? AND created_at > datetime('now', ?)",
+            (token, f"-{REFRESH_TTL} seconds"),
+        ).fetchone()
+        if found is None:
+            return None
+        return _issue(connection, found["user_id"])
+
+
+def logout(token: str) -> None:
+    with locked() as connection:
+        found = connection.execute("SELECT user_id FROM refresh_tokens WHERE token = ?", (token,)).fetchone()
+        if found is not None:
+            connection.execute("DELETE FROM sessions WHERE user_id = ?", (found["user_id"],))
+            connection.execute("DELETE FROM refresh_tokens WHERE user_id = ?", (found["user_id"],))
+
+
+def user_from_fresh_token(token: str) -> sqlite3.Row | None:
+    with connect() as connection:
+        return connection.execute(
+            """
+            SELECT users.* FROM sessions
+            JOIN users ON users.id = sessions.user_id
+            WHERE sessions.token = ? AND sessions.kind = 'v1' AND sessions.created_at > datetime('now', ?)
+            """,
+            (token, f"-{ACCESS_TTL} seconds"),
+        ).fetchone()
+
+
+def update_user(user_id: str, **fields) -> sqlite3.Row:
+    assert set(fields) <= {"display_name", "country", "coach", "timezone", "apple_refresh"}, fields
+    with connect() as connection:
+        for column, value in fields.items():
+            connection.execute(f"UPDATE users SET {column} = ? WHERE id = ?", (value, user_id))
+        return _user(connection, user_id)
+
+
+def delete_user(user_id: str) -> None:
+    with locked() as connection:
+        owned = [row["code"] for row in connection.execute("SELECT code FROM leagues WHERE owner_id = ?", (user_id,))]
+        for code in owned:
+            connection.execute("DELETE FROM league_members WHERE code = ?", (code,))
+            connection.execute("DELETE FROM leagues WHERE code = ?", (code,))
+        for table in ("league_members", "attempts", "sessions", "refresh_tokens", "semantic_cache"):
+            connection.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+        connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
+def count_today(row: sqlite3.Row, mode: str) -> int:
+    with connect() as connection:
+        return _count_mode(connection, row["id"], mode, row)
+
+
+def attempts_since(user_id: str, start: str) -> list[sqlite3.Row]:
+    with connect() as connection:
+        return connection.execute(
+            """
+            SELECT mode, elo_delta, created_at FROM attempts
+            WHERE user_id = ? AND outcome != 'start' AND created_at >= ?
+            """,
+            (user_id, start),
+        ).fetchall()
+
+
+def player_stats(user_id: str) -> sqlite3.Row:
+    with connect() as connection:
+        return connection.execute(
+            """
+            SELECT
+                COUNT(*) AS sessions,
+                MAX(CASE WHEN mode = 'rush-result' THEN json_extract(verdict, '$.solved') END) AS rush_best
+            FROM attempts
+            WHERE user_id = ? AND outcome != 'start'
+            """,
+            (user_id,),
+        ).fetchone()
+
+
+def attempts_page(user_id: str, limit: int, before: str | None) -> list[sqlite3.Row]:
+    with connect() as connection:
+        return connection.execute(
+            """
+            SELECT * FROM attempts
+            WHERE user_id = ? AND outcome != 'start' AND created_at < COALESCE(?, '9999')
+            ORDER BY created_at DESC, rowid DESC
+            LIMIT ?
+            """,
+            (user_id, before, limit),
+        ).fetchall()
+
+
+def start_session(user_id: str, mode: str, puzzle_id: str, position: str, daily_limit: int | None) -> tuple[str, int]:
+    session_id = str(uuid.uuid4())
+    with locked() as connection:
+        row = _user(connection, user_id)
+        used = _count_mode(connection, user_id, mode, row)
+        if daily_limit is not None and used >= daily_limit:
+            raise QuotaExceeded(mode)
+        # Сессия режима это строка попытки: старт уже тратит лимит, ответ дописывает исход.
+        connection.execute(
+            """
+            INSERT INTO attempts (id, user_id, puzzle_id, action, outcome, reason, mode, position, created_at)
+            VALUES (?, ?, ?, 'target', 'start', 'start', ?, ?, ?)
+            """,
+            (session_id, user_id, puzzle_id, mode, position, now_stamp()),
+        )
+    return session_id, used + 1
+
+
+def session_row(user_id: str, session_id: str) -> sqlite3.Row | None:
+    with connect() as connection:
+        return connection.execute(
+            "SELECT * FROM attempts WHERE id = ? AND user_id = ?", (session_id, user_id)
+        ).fetchone()
+
+
+def finish_session(session_id: str, difficulty: int, score: float, outcome: str, reason: str, text, verdict: dict) -> sqlite3.Row:
+    with locked() as connection:
+        session = connection.execute("SELECT * FROM attempts WHERE id = ?", (session_id,)).fetchone()
+        if session["outcome"] == "start":
+            _, delta = _glicko(connection, session["user_id"], session["position"], difficulty, score)
+            connection.execute(
+                "UPDATE attempts SET outcome = ?, reason = ?, elo_delta = ?, user_text = ?, verdict = ? WHERE id = ?",
+                (outcome, reason, delta, text, json.dumps(verdict, ensure_ascii=False), session_id),
+            )
+        return connection.execute("SELECT * FROM attempts WHERE id = ?", (session_id,)).fetchone()
+
+
+def board_rows(user_ids: list[str] | None = None) -> list[sqlite3.Row]:
+    query = """
+        SELECT users.*, (
+            SELECT elo_delta FROM attempts
+            WHERE attempts.user_id = users.id AND outcome != 'start'
+            ORDER BY created_at DESC, rowid DESC LIMIT 1
+        ) AS last_delta
+        FROM users
+        WHERE provider IS NOT NULL
+    """
+    params: list = []
+    if user_ids is not None:
+        query += f" AND id IN ({','.join('?' for _ in user_ids) or 'NULL'})"
+        params = list(user_ids)
+    # ponytail: вся таблица в память; на десятках тысяч игроков нужен индекс по ELO и окно вокруг игрока
+    query += " ORDER BY overall_elo DESC, created_at, rowid"
+    with connect() as connection:
+        return connection.execute(query, params).fetchall()
+
+
+def leagues_of(user_id: str) -> list[sqlite3.Row]:
+    with connect() as connection:
+        return connection.execute(
+            """
+            SELECT leagues.* FROM leagues
+            JOIN league_members ON league_members.code = leagues.code
+            WHERE league_members.user_id = ?
+            ORDER BY leagues.name
+            """,
+            (user_id,),
+        ).fetchall()
+
+
+def league_row(code: str) -> sqlite3.Row | None:
+    with connect() as connection:
+        return connection.execute("SELECT * FROM leagues WHERE code = ?", (code,)).fetchone()
+
+
+def insert_league(code: str, name: str, owner_id: str) -> bool:
+    with connect() as connection:
+        try:
+            connection.execute("INSERT INTO leagues (code, name, owner_id) VALUES (?, ?, ?)", (code, name, owner_id))
+        except sqlite3.IntegrityError:
+            return False
+        connection.execute("INSERT INTO league_members (code, user_id) VALUES (?, ?)", (code, owner_id))
+    return True
+
+
+def update_league(code: str, **fields) -> None:
+    assert set(fields) <= {"name", "owner_id"}, fields
+    with connect() as connection:
+        for column, value in fields.items():
+            connection.execute(f"UPDATE leagues SET {column} = ? WHERE code = ?", (value, code))
+
+
+def leave_league(code: str, user_id: str) -> None:
+    with connect() as connection:
+        connection.execute("DELETE FROM league_members WHERE code = ? AND user_id = ?", (code, user_id))
+
+
+def delete_league(code: str) -> None:
+    with connect() as connection:
+        connection.execute("DELETE FROM league_members WHERE code = ?", (code,))
+        connection.execute("DELETE FROM leagues WHERE code = ?", (code,))

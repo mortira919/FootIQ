@@ -2,10 +2,12 @@ import json
 import random
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pathlib import Path
 from pydantic import BaseModel
 
@@ -175,7 +177,10 @@ def positions() -> dict:
 
 @app.post("/auth/dev-login")
 def dev_login(body: DevLoginIn, _: None = Depends(limit_ip)) -> dict:
-    token, row = login_dev(body.name)
+    try:
+        token, row = login_dev(body.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"access_token": token, "token_type": "bearer", "user": public_user(row)}
 
 
@@ -210,14 +215,14 @@ def puzzle_next(user: dict = Depends(current_user)) -> dict:
     return _pack(puzzle, random.choice((False, True)))
 
 
-def _daily_for(position: str) -> tuple[dict, bool]:
+def _daily_for(position: str, day: date | None = None) -> tuple[dict, bool]:
     pool = []
     for puzzle in sorted(for_position(PUZZLES, position), key=lambda item: item["id"]):
         pool.append((puzzle, False))
         pool.append((puzzle, True))
     if not pool:
         raise HTTPException(status_code=404, detail="Нет задачи дня для этого амплуа")
-    return pool[datetime.now(timezone.utc).date().toordinal() % len(pool)]
+    return pool[(day or datetime.now(timezone.utc).date()).toordinal() % len(pool)]
 
 
 @app.get("/puzzles/daily")
@@ -454,3 +459,11 @@ def enter_league(body: JoinIn, user: dict = Depends(limit_user)) -> dict:
         raise HTTPException(status_code=404, detail="Лига не найдена")
     return {"code": body.code.strip().upper()}
 
+
+
+from app import v1  # noqa: E402  (v1 берёт хелперы из этого модуля)
+
+app.include_router(v1.router)
+app.add_exception_handler(StarletteHTTPException, v1.http_error)
+app.add_exception_handler(RequestValidationError, v1.validation_error)
+app.add_exception_handler(Exception, v1.server_error)
