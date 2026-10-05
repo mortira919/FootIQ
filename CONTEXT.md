@@ -10,7 +10,7 @@
 C:\Users\User\.fly\bin\flyctl.exe deploy --ha=false --remote-only -a footiq
 ```
 
-Локально стенд открывается на `http://127.0.0.1:8000` (команды в README). Тесты: 70 зелёных, `cd backend && PYTHONPATH=. .venv/bin/python -m unittest discover -s tests`.
+Локально стенд открывается на `http://127.0.0.1:8000` (команды в README). Тесты: 72 зелёных, `cd backend && PYTHONPATH=. .venv/bin/python -m unittest discover -s tests`.
 
 ## Что сделано за 4–5 октября
 
@@ -19,6 +19,8 @@ C:\Users\User\.fly\bin\flyctl.exe deploy --ha=false --remote-only -a footiq
 3. Закрыта дыра. Раньше токен приложения открывал стенд, и игрок мог включить себе PRO через `/users/me/tier`, а через `dev-login` войти под чужим `id`. Теперь у токенов есть поле `sessions.kind`, токены стенда и приложения друг к другу не подходят.
 4. Сервер выложен на Fly.io. В секреты прописан `GOOGLE_CLIENT_ID` (web client `258979509540-foaii5qns175ulb73ntq71rpeogqu5q5.apps.googleusercontent.com`).
 5. Фронтендеру ушло сообщение: адрес сервера, флаги сборки, что от него нужно.
+6. Сцены взяты из клиентского `lib/engine/scenes.dart` один в один. `backend/tests/test_scenes.py` повторяет его `test/polygon_test.dart` и проходит. Точки видеоразбора `dm` переведены в метры новой сцены.
+7. В секреты Fly прописан `APPLE_BUNDLE_ID=com.footiq.footiq`.
 
 ## Что работает в /v1
 
@@ -40,14 +42,14 @@ C:\Users\User\.fly\bin\flyctl.exe deploy --ha=false --remote-only -a footiq
 
 ## Ждём
 
-- **От фронтендера:** Android и iOS OAuth-клиенты в том же проекте Google Cloud, bundle id для Apple, прогон `test/remote_backend_test.dart` против сервера, файлы `lib/engine/scenes.dart` и `test/polygon_test.dart` для сверки сцен.
-- **Apple:** нужен bundle id, его надо прописать командой `flyctl secrets set APPLE_BUNDLE_ID=... -a footiq`. Отзыв входа Apple при удалении аккаунта требует ещё `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (.p8).
-- **Сцены:** совпадение наших 10 сцен с клиентскими не проверено. Если координаты разные, исход на сервере не совпадёт с анимацией.
+- **Google Cloud (делаем мы):** Android OAuth-клиент (пакет `com.footiq.footiq`, debug SHA-1 `13:05:D9:44:B7:1E:E5:65:64:9C:20:32:7E:60:D5:F2:C9:04:69:08`) и iOS-клиент (bundle id `com.footiq.footiq`). ID iOS-клиента и reversed client ID отправить Диме, ID iOS-клиента добавить в `GOOGLE_CLIENT_ID` через запятую.
+- **Дима:** проверит вход Google и все режимы на живом сервере. Release SHA-1 пришлёт после публикации в Play. Sign in with Apple включит, когда будет Mac и доступ к Apple Developer.
+- **Apple:** отзыв входа при удалении аккаунта требует `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (.p8).
 
 ## Следующий шаг
 
-1. Сверить сцены, когда придёт `scenes.dart`.
-2. Включить вход Apple.
+1. Завести Android и iOS OAuth-клиенты.
+2. Ключ Apple для отзыва входа.
 3. LLM для видео, webhook RevenueCat, видеоразборы для остальных ролей.
 4. Закрыть репозиторий: он публичный (Settings → Danger zone → Change visibility).
 
