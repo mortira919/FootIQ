@@ -677,6 +677,8 @@ def _entry(item, rank: int, me_id: str) -> dict:
 
 
 def board(rows, me_id: str, limit: int) -> dict:
+    # Игрок без роли ещё в онбординге, клиент не разберёт его строку в таблице.
+    rows = [item for item in rows if item["primary_position"] or item["id"] == me_id]
     ids = [item["id"] for item in rows]
     mine = ids.index(me_id)
     shown = set(range(min(limit, len(rows)))) | set(range(max(0, mine - 2), min(len(rows), mine + 3)))

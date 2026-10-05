@@ -145,6 +145,8 @@ def init_db() -> None:
         connection.executescript(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS users_identity ON users(provider, sub);
+            -- клиент разбирает region как обязательную строку, по умолчанию первый регион списка, как в LocalBackend
+            UPDATE users SET country = 'RU' WHERE provider IS NOT NULL AND country IS NULL;
             CREATE TABLE IF NOT EXISTS refresh_tokens (
                 token TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL REFERENCES users(id),
@@ -566,8 +568,8 @@ def login_provider(provider: str, sub: str, email: str | None, name: str | None)
             user_id = str(uuid.uuid4())
             connection.execute(
                 """
-                INSERT INTO users (id, name, provider, sub, email, display_name, timezone)
-                VALUES (?, ?, ?, ?, ?, ?, '0')
+                INSERT INTO users (id, name, provider, sub, email, display_name, timezone, country)
+                VALUES (?, ?, ?, ?, ?, ?, '0', 'RU')
                 """,
                 (user_id, f"{provider}:{user_id}", provider, sub, email, name),
             )
