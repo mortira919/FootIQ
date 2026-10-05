@@ -10,7 +10,7 @@
 C:\Users\User\.fly\bin\flyctl.exe deploy --ha=false --remote-only -a footiq
 ```
 
-Локально стенд открывается на `http://127.0.0.1:8000` (команды в README). Тесты: 72 зелёных, `cd backend && PYTHONPATH=. .venv/bin/python -m unittest discover -s tests`.
+Локально стенд открывается на `http://127.0.0.1:8000` (команды в README). Тесты: 73 зелёных, `cd backend && PYTHONPATH=. .venv/bin/python -m unittest discover -s tests`.
 
 ## Что сделано за 4–5 октября
 
@@ -21,6 +21,8 @@ C:\Users\User\.fly\bin\flyctl.exe deploy --ha=false --remote-only -a footiq
 5. Фронтендеру ушло сообщение: адрес сервера, флаги сборки, что от него нужно.
 6. Сцены взяты из клиентского `lib/engine/scenes.dart` один в один. `backend/tests/test_scenes.py` повторяет его `test/polygon_test.dart` и проходит. Точки видеоразбора `dm` переведены в метры новой сцены.
 7. В секреты Fly прописан `APPLE_BUNDLE_ID=com.footiq.footiq`.
+8. Судья сверен с настоящим `evaluate()` из `tactics.dart` клиента (репозиторий https://github.com/Mirengamashii/FootIq, доступ есть). Клиентский движок запускался в Dart с заменой `dart:ui` и сравнивался с нашим `judge()` на 1 006 578 точках: сетка 0,5 м, 20 000 случайных точек и позиции игроков на всех сценах и обоих флангах. Нашлось одно расхождение в конусе отбора (403 точки, на 20 из них клиент показывал золото, а сервер ставил ошибку). Исправлено, теперь расхождений 0.
+9. В `GOOGLE_CLIENT_ID` на сервере три ID через запятую: web, Android (`...-71q6o937...`) и iOS (`...-jdiniob4...`).
 
 ## Что работает в /v1
 
@@ -42,13 +44,12 @@ C:\Users\User\.fly\bin\flyctl.exe deploy --ha=false --remote-only -a footiq
 
 ## Ждём
 
-- **Google Cloud (делаем мы):** Android OAuth-клиент (пакет `com.footiq.footiq`, debug SHA-1 `13:05:D9:44:B7:1E:E5:65:64:9C:20:32:7E:60:D5:F2:C9:04:69:08`) и iOS-клиент (bundle id `com.footiq.footiq`). ID iOS-клиента и reversed client ID отправить Диме, ID iOS-клиента добавить в `GOOGLE_CLIENT_ID` через запятую.
 - **Дима:** проверит вход Google и все режимы на живом сервере. Release SHA-1 пришлёт после публикации в Play. Sign in with Apple включит, когда будет Mac и доступ к Apple Developer.
 - **Apple:** отзыв входа при удалении аккаунта требует `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (.p8).
 
 ## Следующий шаг
 
-1. Завести Android и iOS OAuth-клиенты.
+1. Дождаться живой проверки Димы на телефоне.
 2. Ключ Apple для отзыва входа.
 3. LLM для видео, webhook RevenueCat, видеоразборы для остальных ролей.
 4. Закрыть репозиторий: он публичный (Settings → Danger zone → Change visibility).

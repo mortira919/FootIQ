@@ -38,6 +38,13 @@ class ClientScenes(unittest.TestCase):
         self.assertEqual(judge(st, freeze(st, 0))["reason"], "cone", "standing in front of the CB")
         self.assertEqual(judge(gk, (-3, 90))["reason"], "out")
 
+    def test_cone_steps_like_client(self):
+        # Точки, где сервер раньше видел конус, а evaluate() клиента нет: сравнение на 1 006 578 точках.
+        cases = [("cb", (9.5, 55.5), "safe"), ("am", (18, 35), "safe"), ("st", (19.5, 27.5), "safe"),
+                 ("gk", (52, 88.5), "optimal"), ("lm/rm", (39, 20), "optimal")]
+        for role, point, reason in cases:
+            self.assertEqual(judge(BY_ROLE[role], point)["reason"], reason, role)
+
 
 if __name__ == "__main__":
     unittest.main()
