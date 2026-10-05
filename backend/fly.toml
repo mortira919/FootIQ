@@ -1,4 +1,4 @@
-app = "footiq-api"
+app = "footiq"
 primary_region = "fra"
 
 [env]
