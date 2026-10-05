@@ -623,8 +623,7 @@ def video_out(puzzle: dict) -> dict:
         "sceneId": to_client(position),
         "title": puzzle["title"],
         "videoUrl": puzzle.get("video_url"),
-        # ponytail: в json кадра доли 0..1, контракт ждёт метры поля 68 × 105
-        "options": [{"x": round(o["x"] * 68, 1), "y": round(o["y"] * 105, 1)} for o in puzzle["options"]],
+        "options": [{"x": option["x"], "y": option["y"]} for option in puzzle["options"]],
         "chips": puzzle["chips"],
     }
 
