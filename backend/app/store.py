@@ -3,6 +3,7 @@ from app.position_rule import can_change_position
 from app.rank import rank_for
 from app.streak import advance_streak, visible_streak
 import json
+import os
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -11,7 +12,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "data" / "footiq.sqlite"
+DB_PATH = Path(os.environ.get("FOOTIQ_DB", ROOT / "data" / "footiq.sqlite"))
 
 POSITIONS = ("gk", "cb", "rb/lb", "dm", "cm", "am", "lm/rm", "lw/rw", "st", "ss")
 DEFAULT_TZ = "Asia/Almaty"
