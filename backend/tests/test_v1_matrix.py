@@ -310,7 +310,7 @@ class Matrix(unittest.TestCase):
         self.assertEqual(
             {key: me[key] for key in expected - {"id", "name", "email"}},
             {
-                "provider": "google", "position": None, "positionLockDays": None, "region": None, "coach": "base",
+                "provider": "google", "position": None, "positionLockDays": None, "region": "Россия", "coach": "base",
                 "isPro": False, "elo": 800, "positionElo": {}, "eloHistory": [800] * 8, "radar": [None] * 5,
                 "streak": 0, "streakWeek": [False] * 7, "dailyDone": False, "daily": None, "rushBest": 0,
                 "attemptsLeft": {"polygon": None, "rush": 2, "video": 1}, "sessionsCount": 0,
@@ -648,8 +648,13 @@ class Matrix(unittest.TestCase):
         self.assertEqual(board["me"], next(item for item in board["players"] if item["isMe"]))
         self.assertEqual((board["me"]["rank"], board["me"]["elo"]), (7, 89940))
         self.assertEqual([item["id"] for item in board["players"][:3]], [who["user"]["id"] for who in top[:3]])
-        self.assertEqual(board["total"], sql("SELECT COUNT(*) AS n FROM users WHERE provider IS NOT NULL")[0]["n"])
+        self.assertEqual(board["total"], sql("SELECT COUNT(*) AS n FROM users WHERE provider IS NOT NULL AND primary_position IS NOT NULL")[0]["n"])
         self.assertEqual(set(board["players"][0]), {"id", "rank", "name", "position", "elo", "region", "delta", "isMe"})
+
+        newcomer = self.login()
+        self.assertNotIn(newcomer["user"]["id"], [item["id"] for item in self.call("GET", "/v1/leaderboards/global?limit=100", me)["players"]])
+        self.assertTrue(all(item["position"] and item["region"] for item in self.call("GET", "/v1/leaderboards/global", me)["players"]))
+        self.assertIsNone(self.call("GET", "/v1/leaderboards/global", newcomer)["me"]["position"])
 
         stand = self.client.post("/auth/dev-login", json={"name": "stand-top-" + uuid.uuid4().hex[:6]}).json()["user"]
         sql("UPDATE users SET overall_elo = 999999 WHERE id = ?", stand["id"])
@@ -668,7 +673,7 @@ class Matrix(unittest.TestCase):
         result = self.call("POST", "/v1/attempts/polygon", who, json={"sceneId": "st", "target": None})
         self.assertEqual(self.call("GET", "/v1/leaderboards/global", who)["me"]["delta"], result["eloDelta"])
 
-        self.error("GET", "/v1/leaderboards/regional", who, 400, "validation_error")
+        self.assertEqual(self.call("GET", "/v1/leaderboards/regional", who)["me"]["region"], "Россия")
         self.call("PATCH", "/v1/me", who, json={"region": "Армения"})
         mine = self.call("GET", "/v1/leaderboards/regional", who)
         self.assertTrue(all(item["region"] == "Армения" for item in mine["players"]))
