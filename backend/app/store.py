@@ -170,6 +170,42 @@ def init_db() -> None:
             )
             """
         )
+        connection.executescript(
+            """
+            -- Жалобы игроков (Apple 1.2, Google UGC и AI-Generated Content). target_type: user | league | review.
+            CREATE TABLE IF NOT EXISTS reports (
+                id TEXT PRIMARY KEY,
+                reporter_id TEXT NOT NULL,
+                target_type TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                target_owner_id TEXT,
+                reason TEXT NOT NULL,
+                comment TEXT,
+                status TEXT NOT NULL DEFAULT 'open',
+                resolution TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                resolved_at TEXT
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS reports_open_once
+                ON reports(reporter_id, target_type, target_id) WHERE status = 'open';
+            CREATE TABLE IF NOT EXISTS blocks (
+                blocker_id TEXT NOT NULL,
+                blocked_id TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (blocker_id, blocked_id)
+            );
+            -- Журнал обращений к LLM: без текста ответа, он уже лежит в попытке.
+            CREATE TABLE IF NOT EXISTS llm_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                attempt_id TEXT,
+                provider TEXT NOT NULL,
+                status TEXT NOT NULL,
+                duration_ms INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
 
 
 def login_dev(name: str) -> tuple[str, sqlite3.Row]:
@@ -622,14 +658,25 @@ def update_user(user_id: str, **fields) -> sqlite3.Row:
         return _user(connection, user_id)
 
 
+# Таблицы, где строки игрока лежат в колонке user_id. Попытки включают ответы в Раздевалке (user_text, verdict).
+USER_TABLES = ("league_members", "attempts", "sessions", "refresh_tokens", "semantic_cache", "llm_log")
+
+
 def delete_user(user_id: str) -> None:
+    """Стирает всё, что связано с игроком, одной транзакцией (DELETE /v1/me и удаление через веб)."""
     with locked() as connection:
         owned = [row["code"] for row in connection.execute("SELECT code FROM leagues WHERE owner_id = ?", (user_id,))]
         for code in owned:
+            # Лига создателя исчезает у всех участников, вместе с жалобами на неё.
             connection.execute("DELETE FROM league_members WHERE code = ?", (code,))
+            connection.execute("DELETE FROM reports WHERE target_type = 'league' AND target_id = ?", (code,))
             connection.execute("DELETE FROM leagues WHERE code = ?", (code,))
-        for table in ("league_members", "attempts", "sessions", "refresh_tokens", "semantic_cache"):
+        for table in USER_TABLES:
             connection.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+        # Жалобы, которые подал игрок, и жалобы на него самого и его разборы: цели больше нет.
+        connection.execute("DELETE FROM reports WHERE reporter_id = ? OR target_owner_id = ?", (user_id, user_id))
+        connection.execute("DELETE FROM reports WHERE target_type = 'user' AND target_id = ?", (user_id,))
+        connection.execute("DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?", (user_id, user_id))
         connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
 
 

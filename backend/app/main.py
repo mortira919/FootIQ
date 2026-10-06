@@ -1,4 +1,5 @@
 import json
+import os
 import random
 import time
 from collections import defaultdict
@@ -199,7 +200,13 @@ def league_invite(code: str) -> FileResponse:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "puzzles": len(PUZZLES)}
+    body = {"status": "ok", "puzzles": len(PUZZLES)}
+    if os.environ.get("AMPLUA_ENV") != "prod":
+        # На стенде видно, какие внешние интеграции настроены: без ключа Apple revoke не выполняется.
+        from app import apple, revenuecat
+
+        body["integrations"] = {"appleRevoke": apple.configured(), "revenuecat": revenuecat.configured()}
+    return body
 
 
 @app.get("/positions")

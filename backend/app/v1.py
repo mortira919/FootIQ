@@ -5,10 +5,8 @@ import logging
 import os
 import re
 import secrets
-import time as clock
 from datetime import date, datetime, time, timedelta, timezone
 
-import httpx
 import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
@@ -17,6 +15,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app import apple
+from app.accounts import erase_account
 from app.elo import score_for
 from app.geometry import judge
 from app.main import PUZZLES, VIDEOS, _daily_for, _hit, limit_ip
@@ -33,7 +33,6 @@ from app.store import (
     commit_polygon,
     count_today,
     delete_league,
-    delete_user,
     effective_tier,
     finish_session,
     insert_league,
@@ -165,30 +164,6 @@ def verify_identity(provider: str, token: str) -> dict:
         raise fail(503, "auth_unavailable", "Сервер входа не отвечает, попробуй позже") from exc
     except jwt.PyJWTError as exc:
         raise fail(401, "unauthorized", "Не удалось подтвердить вход") from exc
-
-
-def _apple_secret() -> str | None:
-    team, key_id, key = (os.environ.get(name) for name in ("APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_PRIVATE_KEY"))
-    if not (team and key_id and key):
-        return None
-    now = int(clock.time())
-    claims = {"iss": team, "iat": now, "exp": now + 300, "aud": "https://appleid.apple.com", "sub": os.environ["APPLE_BUNDLE_ID"]}
-    return jwt.encode(claims, key.replace("\\n", "\n"), algorithm="ES256", headers={"kid": key_id})
-
-
-def _apple_call(path: str, data: dict) -> dict | None:
-    secret = _apple_secret()
-    if secret is None:
-        log.warning("Apple %s пропущен: нет APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_PRIVATE_KEY", path)
-        return None
-    payload = {"client_id": os.environ["APPLE_BUNDLE_ID"], "client_secret": secret, **data}
-    try:
-        response = httpx.post(f"https://appleid.apple.com/auth/{path}", data=payload, timeout=10)
-        response.raise_for_status()
-        return response.json() if response.content else {}
-    except (httpx.HTTPError, ValueError):
-        log.exception("Apple %s не прошёл", path)
-        return None
 
 
 # --- игрок и Me ---
@@ -384,10 +359,10 @@ def auth_apple(
     valid = len(name) >= 2 and name.isprintable()
     access, refresh, row = login_provider("apple", claims["sub"], claims.get("email"), name if valid else None)
     if body.authorizationCode:
-        # Refresh-токен Apple нужен только чтобы отозвать вход при удалении аккаунта.
-        tokens = _apple_call("token", {"code": body.authorizationCode, "grant_type": "authorization_code"})
-        if tokens and tokens.get("refresh_token"):
-            row = update_user(row["id"], apple_refresh=tokens["refresh_token"])
+        # Refresh-токен Apple нужен, чтобы отозвать вход при удалении аккаунта. Новый код заменяет старый токен.
+        token = apple.exchange_code(body.authorizationCode)
+        if token:
+            row = update_user(row["id"], apple_refresh=token)
     return _session(access, refresh, row, x_timezone_offset)
 
 
@@ -407,9 +382,7 @@ def auth_logout(body: RefreshIn) -> Response:
 
 @router.delete("/me", status_code=204)
 def delete_me(row=Depends(player)) -> Response:
-    if row["provider"] == "apple" and row["apple_refresh"]:
-        _apple_call("revoke", {"token": row["apple_refresh"], "token_type_hint": "refresh_token"})
-    delete_user(row["id"])
+    erase_account(row)
     return Response(status_code=204)
 
 

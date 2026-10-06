@@ -1,6 +1,6 @@
-# FootIQ API: контракт между клиентом и сервером
+# Amplua API: контракт между клиентом и сервером
 
-Здесь описано, что Flutter-клиент FootIQ отправляет серверу и что ждёт в ответ. Клиент уже написан под этот контракт: достаточно поднять сервер и запустить приложение с `--dart-define=API_URL=https://…`, экраны менять не придётся.
+Здесь описано, что Flutter-клиент Amplua отправляет серверу и что ждёт в ответ. Клиент уже написан под этот контракт: достаточно поднять сервер и запустить приложение с `--dart-define=API_URL=https://…`, экраны менять не придётся.
 
 **Где это в коде клиента:**
 
@@ -46,14 +46,22 @@
 Что проверяет сервер при входе:
 
 - **Google:** подпись `idToken` по ключам Google, `aud` = web/server client ID (тот, что клиент получает в `GOOGLE_SERVER_CLIENT_ID`), `iss` = `accounts.google.com`, срок жизни. Email берётся из токена.
-- **Apple:** подпись `identityToken` по JWKS Apple, `aud` = bundle id приложения, `iss` = `https://appleid.apple.com`. `authorizationCode` нужен, чтобы получить refresh-токен Apple: он понадобится при удалении аккаунта (Apple требует отзывать токен). **Имя Apple отдаёт только при самом первом входе,** поэтому клиент шлёт `givenName` и `familyName` сразу, а сервер сохраняет их, если имя ещё не задано.
+- **Apple:** подпись `identityToken` по JWKS Apple, `aud` = bundle id приложения (`com.amplua.amplua`), `iss` = `https://appleid.apple.com`. **Имя Apple отдаёт только при самом первом входе,** поэтому клиент шлёт `givenName` и `familyName` сразу, а сервер сохраняет их, если имя ещё не задано.
+  - `authorizationCode` сервер обменивает на refresh-токен Apple (`POST https://appleid.apple.com/auth/token`, `grant_type=authorization_code`) и хранит его: им отзывается вход при удалении аккаунта. Новый код при повторном входе заменяет старый токен.
+  - `client_secret` для обмена и отзыва: JWT ES256, подписанный ключом Sign in with Apple (`.p8`): `iss` = Team ID, `sub` = bundle id, `aud` = `https://appleid.apple.com`, `kid` = Key ID. Ключи в секретах сервера: `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`.
+  - Email из токена Apple принимается любой, без белого списка доменов: и `…@privaterelay.appleid.com`, и `…@private.icloud.com` (новые relay-адреса Apple с 24.08.2026), и обычный. Apple присылает email только при первом входе, повторный вход без email сохранённый адрес не стирает.
 - Первый вход создаёт игрока со стартовым ELO 800 и `position: null`. Клиент после входа смотрит на `user.position`: `null` ведёт в выбор амплуа, иначе сразу в приложение (новое устройство получает весь прогресс).
 
-`DELETE /v1/me`:
+`DELETE /v1/me` → `204`. Удаление сразу и необратимо, одной транзакцией:
 
-- Удаляет профиль, попытки, серию и членство в чужих лигах. Лиги, где игрок создатель, удаляются у всех участников.
-- Для Apple отзывает токен через `https://appleid.apple.com/auth/revoke`.
-- Подписку не отменяет: она принадлежит аккаунту App Store / Google Play. После нового входа «Восстановить покупки» должно вернуть PRO.
+- **Что удаляется:** профиль (id, email, имя, амплуа, регион, часовой пояс, согласие на ИИ), все попытки, в том числе ответы в Раздевалке и разборы тренера, ELO и серия, сессии и refresh-токены, членство в чужих лигах, записи семантического кэша и журнал запросов к LLM, жалобы и блокировки, которые создал игрок, а также жалобы и блокировки, где он цель.
+- **Лиги, где игрок создатель,** удаляются у всех участников вместе с таблицей: код перестаёт работать, `GET /v1/leagues` у участников их больше не возвращает.
+- **Apple:** сервер отзывает сохранённый refresh-токен через `POST https://appleid.apple.com/auth/revoke` (`token_type_hint=refresh_token`).
+- **RevenueCat:** сервер удаляет подписчика `DELETE https://api.revenuecat.com/v1/subscribers/{Me.id}` (секретный ключ `REVENUECAT_SECRET_KEY`; по документации удаление ставится в очередь асинхронно).
+- **Сбой Apple или RevenueCat удаление не останавливает:** данные в базе стираются в любом случае, ошибка пишется в журнал сервера.
+- **После удаления** старый `accessToken` и `refreshToken` дают 401. Повторный вход тем же Google или Apple создаёт нового игрока с ELO 800 и `position: null`.
+- **Подписку не отменяет:** она принадлежит аккаунту App Store / Google Play, клиент предупреждает об этом и даёт ссылку на управление подпиской. После нового входа «Восстановить покупки» возвращает PRO: RevenueCat при `Restore Behavior = Transfer to new App User ID` (значение по умолчанию в проекте RevenueCat) переносит чек на новый `app_user_id`. Эту настройку в проекте RevenueCat не менять на «Keep with original App User ID».
+- **Что хранится после удаления:** ежедневные снапшоты диска сервера до 5 дней, журналы запросов хостинга до 30 дней, записи о покупках у Apple, Google и RevenueCat по их правилам. То же написано в политике конфиденциальности.
 
 ## Профиль и прогресс
 
@@ -300,14 +308,14 @@
 
 1. **Сборка с сервером:**
    ```
-   flutter run --dart-define=API_URL=https://api.footiq.app \
+   flutter run --dart-define=API_URL=https://api.amplua.app \
                --dart-define=GOOGLE_SERVER_CLIENT_ID=<web client id>.apps.googleusercontent.com \
                --dart-define=GOOGLE_IOS_CLIENT_ID=<ios client id>.apps.googleusercontent.com
    ```
    Без `API_URL` приложение работает на `LocalBackend`, а вход фейковый (без окон Google и Apple). На Android-эмуляторе локальный сервер доступен как `http://10.0.2.2:<порт>`.
 2. **Google Cloud Console** (один проект, три OAuth-клиента):
    - Web client: его ID идёт в `GOOGLE_SERVER_CLIENT_ID` и в проверку `aud` на сервере.
-   - Android client: пакет `com.footiq.footiq` и SHA-1 ключа подписи (debug: `keytool -list -v -keystore ~/.android/debug.keystore`, release: из Play Console).
+   - Android client: пакет `com.amplua.amplua` и SHA-1 ключа подписи (debug: `keytool -list -v -keystore ~/.android/debug.keystore`, release: из Play Console).
    - iOS client: bundle id приложения. Его ID идёт в `GOOGLE_IOS_CLIENT_ID`, а «reversed client ID» нужно добавить в `ios/Runner/Info.plist` как URL scheme (`CFBundleURLTypes`).
 3. **Apple:**
    - в Xcode для Runner включить capability «Sign in with Apple»;
