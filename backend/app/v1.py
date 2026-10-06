@@ -8,23 +8,30 @@ import secrets
 from datetime import date, datetime, time, timedelta, timezone
 
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, Response
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.responses import JSONResponse, PlainTextResponse
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app import apple
+from app import apple, notify
 from app.accounts import erase_account
 from app.elo import score_for
 from app.geometry import judge
+from app.moderation import is_offensive
 from app.main import PUZZLES, VIDEOS, _daily_for, _hit, limit_ip
 from app.radar import POINTS
 from app.store import (
     POSITIONS,
     STAMP,
     QuotaExceeded,
+    add_block,
+    add_report,
+    attempt_row,
+    blocked_by,
+    blocked_ids,
+    remove_block,
     _zone,
     attempts_for_radar,
     attempts_page,
@@ -72,6 +79,7 @@ RUSH_LIVES = 3
 RUSH_WINDOW = 210
 LEAGUE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 LEAGUE_CODE = re.compile(f"[{LEAGUE_ALPHABET}]{{6}}")
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "amplua.support@gmail.com")
 STATUS_CODES = {
     400: "validation_error",
     401: "unauthorized",
@@ -184,6 +192,7 @@ def _with_offset(row, header: str | None):
 
 
 def player(
+    request: Request,
     authorization: str | None = Header(default=None),
     x_timezone_offset: str | None = Header(default=None),
 ):
@@ -192,6 +201,9 @@ def player(
     row = user_from_fresh_token(authorization.removeprefix("Bearer ").strip())
     if row is None:
         raise fail(401, "unauthorized", "Сессия истекла")
+    # Забаненному доступно только удаление аккаунта (Apple 5.1.1(v): удалить можно всегда).
+    if row["banned_at"] and not (request.method == "DELETE" and request.url.path == "/v1/me"):
+        raise fail(403, "account_banned", f"Аккаунт заблокирован за нарушение правил. Вопросы: {SUPPORT_EMAIL}")
     _hit("user:" + row["id"], 60)
     return _with_offset(row, x_timezone_offset)
 
@@ -356,7 +368,7 @@ def auth_apple(
 ) -> dict:
     claims = verify_identity("apple", body.identityToken)
     name = " ".join(part.strip() for part in (body.givenName, body.familyName) if part and part.strip())[:20].strip()
-    valid = len(name) >= 2 and name.isprintable()
+    valid = len(name) >= 2 and name.isprintable() and not is_offensive(name)
     access, refresh, row = login_provider("apple", claims["sub"], claims.get("email"), name if valid else None)
     if body.authorizationCode:
         # Refresh-токен Apple нужен, чтобы отозвать вход при удалении аккаунта. Новый код заменяет старый токен.
@@ -408,6 +420,8 @@ def patch_me(body: MePatch, row=Depends(player)) -> dict:
         name = body.name.strip()
         if not 2 <= len(name) <= 20 or not name.isprintable():
             raise invalid("Имя от 2 до 20 символов, без переносов строк")
+        if is_offensive(name):
+            raise invalid("В имени есть недопустимые слова. Выбери другое")
         fields["display_name"] = name
     if body.region is not None:
         if body.region not in REGIONS:
@@ -649,14 +663,15 @@ def _entry(item, rank: int, me_id: str) -> dict:
     }
 
 
-def board(rows, me_id: str, limit: int) -> dict:
+def board(rows, me_id: str, limit: int, hidden: set[str] = frozenset()) -> dict:
     # Игрок без роли ещё в онбординге, клиент не разберёт его строку в таблице.
     rows = [item for item in rows if item["primary_position"] or item["id"] == me_id]
     ids = [item["id"] for item in rows]
     mine = ids.index(me_id)
     shown = set(range(min(limit, len(rows)))) | set(range(max(0, mine - 2), min(len(rows), mine + 3)))
     return {
-        "players": [_entry(rows[index], index + 1, me_id) for index in sorted(shown)],
+        # Заблокированных игрок не видит, но места остальных не сдвигаются: ранг это общий факт таблицы.
+        "players": [_entry(rows[index], index + 1, me_id) for index in sorted(shown) if rows[index]["id"] not in hidden],
         "me": _entry(rows[mine], mine + 1, me_id),
         "total": len(rows),
     }
@@ -674,7 +689,7 @@ def leaderboard(scope: str, limit: int = 100, region: str | None = None, row=Dep
         rows = [item for item in rows if item["country"] == REGIONS[region] or item["id"] == row["id"]]
     elif scope != "global":
         raise fail(404, "not_found", "Нет такой таблицы")
-    return board(rows, row["id"], limit)
+    return board(rows, row["id"], limit, blocked_ids(row["id"]))
 
 
 class LeagueNameIn(Body):
@@ -721,6 +736,8 @@ def _league_name(name: str, row, skip: str | None = None) -> str:
     name = name.strip()
     if not 1 <= len(name) <= 32 or not name.isprintable():
         raise invalid("Название лиги от 1 до 32 символов, без переносов строк")
+    if is_offensive(name):
+        raise invalid("В названии лиги есть недопустимые слова. Выбери другое")
     if any(item["name"].casefold() == name.casefold() and item["code"] != skip for item in leagues_of(row["id"])):
         raise fail(409, "league_name_taken", "У тебя уже есть лига с таким названием")
     return name
@@ -753,7 +770,7 @@ def join(body: JoinIn, row=Depends(player)) -> dict:
 @router.get("/leagues/{league_id}/leaderboard")
 def league_board(league_id: str, row=Depends(player)) -> dict:
     league = _member_league(league_id, row)
-    return board(board_rows(league_member_ids(league["code"])), row["id"], 100)
+    return board(board_rows(league_member_ids(league["code"])), row["id"], 100, blocked_ids(row["id"]))
 
 
 @router.patch("/leagues/{league_id}")
@@ -785,4 +802,91 @@ def leave(league_id: str, row=Depends(player)) -> Response:
 def remove_league(league_id: str, row=Depends(player)) -> Response:
     league = _owned_league(league_id, row)
     delete_league(league["code"])
+    return Response(status_code=204)
+
+
+@router.delete("/leagues/{league_id}/members/{user_id}", status_code=204)
+def kick_member(league_id: str, user_id: str, row=Depends(player)) -> Response:
+    league = _owned_league(league_id, row)
+    if user_id == row["id"]:
+        raise invalid("Себя исключить нельзя: передай права или удали лигу")
+    if user_id not in league_member_ids(league["code"]):
+        raise fail(404, "not_found", "Этот игрок не состоит в лиге")
+    leave_league(league["code"], user_id)
+    return Response(status_code=204)
+
+
+# --- жалобы и блокировки (Apple 1.2, Google UGC и AI-Generated Content) ---
+
+REPORT_TYPES = ("user", "league", "review")
+REPORT_REASONS = ("offensive_name", "offensive_league", "harassment", "cheating", "spam", "harmful_ai", "inaccurate_ai", "other")
+
+
+class ReportIn(Body):
+    targetType: Short
+    targetId: Short
+    reason: Short
+    comment: Annotated[str, Field(max_length=500)] | None = None
+
+
+def _report_target(body: ReportIn, row) -> tuple[str, str]:
+    """Проверяет цель жалобы и возвращает (чей контент, снимок контента для модератора)."""
+    if body.targetType == "user":
+        target = user_row(body.targetId)
+        if target is None or not target["provider"]:
+            raise fail(404, "not_found", "Игрок не найден")
+        if target["id"] == row["id"]:
+            raise invalid("Нельзя пожаловаться на себя")
+        return target["id"], display_name(target)
+    if body.targetType == "league":
+        league = league_row(body.targetId)
+        if league is None:
+            raise fail(404, "not_found", "Лига не найдена")
+        return league["owner_id"], league["name"]
+    # review: только на свой разбор тренера, чужие попытки для игрока не существуют.
+    attempt = attempt_row(body.targetId)
+    if attempt is None or attempt["user_id"] != row["id"] or attempt["mode"] != "video" or attempt["outcome"] == "start":
+        raise fail(404, "not_found", "Разбор не найден")
+    review = (json.loads(attempt["verdict"] or "{}")).get("review") or {}
+    return row["id"], review.get("reply") or ""
+
+
+@router.post("/reports", status_code=204)
+def report(body: ReportIn, background: BackgroundTasks, row=Depends(player)) -> Response:
+    if body.targetType not in REPORT_TYPES:
+        raise invalid("targetType: user, league или review")
+    if body.reason not in REPORT_REASONS:
+        raise invalid("Неизвестная причина жалобы")
+    comment = (body.comment or "").strip() or None
+    owner, snapshot = _report_target(body, row)
+    if add_report(row["id"], body.targetType, body.targetId, owner, body.reason, comment, snapshot):
+        background.add_task(
+            notify.send, f"Amplua: новая жалоба ({body.targetType}, {body.reason}) на «{snapshot[:120]}». Разобрать за 24 часа: /admin"
+        )
+    return Response(status_code=204)
+
+
+class BlockIn(Body):
+    userId: Short
+
+
+@router.get("/blocks")
+def my_blocks(row=Depends(player)) -> list[dict]:
+    return [{"id": item["id"], "name": display_name(item), "position": to_client(item["primary_position"])} for item in blocked_by(row["id"])]
+
+
+@router.post("/blocks", status_code=204)
+def block(body: BlockIn, row=Depends(player)) -> Response:
+    target = user_row(body.userId)
+    if target is None or not target["provider"]:
+        raise fail(404, "not_found", "Игрок не найден")
+    if target["id"] == row["id"]:
+        raise invalid("Нельзя заблокировать себя")
+    add_block(row["id"], target["id"])
+    return Response(status_code=204)
+
+
+@router.delete("/blocks/{user_id}", status_code=204)
+def unblock(user_id: str, row=Depends(player)) -> Response:
+    remove_block(row["id"], user_id)
     return Response(status_code=204)

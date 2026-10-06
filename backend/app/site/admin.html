@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Модерация · Amplua</title>
+<link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/site.css">
+<style>
+  .queue { display: grid; gap: 12px; margin-top: 24px; }
+  .item { padding: 18px 20px; border-radius: var(--radius); background: var(--surface); display: grid; gap: 8px; }
+  .item.overdue { box-shadow: inset 0 0 0 1.5px var(--error); }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--text-3); font-size: 13px; }
+  .snap { color: var(--text); font-size: 17px; }
+  .now { color: var(--text-2); font-size: 14px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .acts button { min-height: 36px; padding: 0 14px; font-size: 14px; }
+  form.login { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+  input[type=password], select { min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+  .status { margin-top: 12px; color: var(--text-2); }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><img src="/assets/mark.svg" alt="" width="32" height="32">Amplua</a>
+</header>
+<main class="doc" style="max-width: 980px">
+  <h1>Очередь жалоб</h1>
+  <p class="date">Каждую жалобу разобрать в течение 24 часов. Просроченные выделены красным.</p>
+  <form class="login" id="login">
+    <input type="password" id="token" placeholder="Токен модератора" autocomplete="off" aria-label="Токен модератора" required>
+    <select id="filter" aria-label="Какие жалобы показать">
+      <option value="open">Открытые</option>
+      <option value="resolved">Решённые</option>
+      <option value="all">Все</option>
+    </select>
+    <button class="btn" type="submit">Показать</button>
+  </form>
+  <p class="status" id="status" role="status"></p>
+  <div class="queue" id="queue"></div>
+</main>
+<script>
+  // Токен живёт только в памяти этой вкладки и уходит в заголовке Authorization.
+  let token = "";
+  const $ = (id) => document.getElementById(id);
+  const esc = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+  async function api(method, path, body) {
+    const response = await fetch(path, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `Ошибка ${response.status}`);
+    return data;
+  }
+
+  function actions(item) {
+    const open = item.status === "open";
+    const buttons = [];
+    if (open && item.targetType === "user") buttons.push(["reset", "Сбросить имя"], ["ban", "Забанить"]);
+    if (open && item.targetType === "league") buttons.push(["rename", "Переименовать лигу"], ["droplg", "Удалить лигу"], ["banowner", "Забанить создателя"]);
+    if (open) buttons.push(["actioned", "Меры приняты"], ["dismissed", "Отклонить"]);
+    return buttons.map(([act, label]) => `<button class="btn ghost" data-act="${act}" data-id="${esc(item.id)}">${label}</button>`).join("");
+  }
+
+  function render(data) {
+    $("status").textContent = `Показано: ${data.items.length}. Просрочено: ${data.overdue}.`;
+    $("queue").innerHTML = data.items.map((item) => `
+      <article class="item${item.overdue ? " overdue" : ""}" data-item='${esc(JSON.stringify(item))}'>
+        <div class="meta"><span>${esc(item.targetType)}</span><span>${esc(item.reason)}</span><span>${item.ageHours} ч назад</span><span>${esc(item.status)}${item.resolution ? ": " + esc(item.resolution) : ""}</span></div>
+        <p class="snap">${esc(item.snapshot) || "без текста"}</p>
+        ${item.comment ? `<p class="now">Комментарий: ${esc(item.comment)}</p>` : ""}
+        <p class="now">Сейчас: ${esc(JSON.stringify(item.current))}</p>
+        <div class="meta"><span>цель ${esc(item.targetId)}</span><span>владелец ${esc(item.targetOwnerId)}</span><span>автор ${esc(item.reporterId)}</span></div>
+        <div class="acts">${actions(item)}</div>
+      </article>`).join("");
+  }
+
+  async function load() {
+    try { render(await api("GET", `/admin/reports?status=${$("filter").value}`)); }
+    catch (error) { $("status").textContent = error.message; $("queue").innerHTML = ""; }
+  }
+
+  $("login").addEventListener("submit", (event) => { event.preventDefault(); token = $("token").value.trim(); load(); });
+  $("queue").addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-act]");
+    if (!button) return;
+    const item = JSON.parse(button.closest(".item").dataset.item);
+    const act = button.dataset.act;
+    try {
+      if (act === "reset") await api("POST", `/admin/users/${item.targetId}/reset-name`);
+      if (act === "ban") { const reason = prompt("Причина бана"); if (!reason) return; await api("POST", `/admin/users/${item.targetId}/ban`, { reason }); }
+      if (act === "banowner") { const reason = prompt("Причина бана создателя"); if (!reason) return; await api("POST", `/admin/users/${item.targetOwnerId}/ban`, { reason }); }
+      if (act === "rename") { const name = prompt("Новое название лиги", "Лига"); if (!name) return; await api("PATCH", `/admin/leagues/${item.targetId}`, { name }); }
+      if (act === "droplg") { if (!confirm("Удалить лигу у всех участников?")) return; await api("DELETE", `/admin/leagues/${item.targetId}`); }
+      if (act === "actioned" || act === "dismissed") await api("POST", `/admin/reports/${item.id}/resolve`, { resolution: act });
+      load();
+    } catch (error) { $("status").textContent = error.message; }
+  });
+</script>
+</body>
+</html>

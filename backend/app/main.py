@@ -204,8 +204,11 @@ def health() -> dict:
     if os.environ.get("AMPLUA_ENV") != "prod":
         # На стенде видно, какие внешние интеграции настроены: без ключа Apple revoke не выполняется.
         from app import apple, revenuecat
+        from app.store import overdue_reports
 
         body["integrations"] = {"appleRevoke": apple.configured(), "revenuecat": revenuecat.configured()}
+        # Жалобы без реакции дольше 20 часов: до 24-часового срока Apple осталось мало времени.
+        body["overdueReports"] = overdue_reports(20)
     return body
 
 
@@ -503,6 +506,10 @@ def enter_league(body: JoinIn, user: dict = Depends(limit_user)) -> dict:
 from app import v1  # noqa: E402  (v1 берёт хелперы из этого модуля)
 
 app.include_router(v1.router)
+
+from app import admin  # noqa: E402
+
+app.include_router(admin.router)
 app.add_exception_handler(StarletteHTTPException, v1.http_error)
 app.add_exception_handler(RequestValidationError, v1.validation_error)
 app.add_exception_handler(Exception, v1.server_error)

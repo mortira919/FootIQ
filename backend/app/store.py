@@ -195,6 +195,15 @@ def init_db() -> None:
                 PRIMARY KEY (blocker_id, blocked_id)
             );
             -- Журнал обращений к LLM: без текста ответа, он уже лежит в попытке.
+            -- Действия модератора: кто что сделал по жалобам (Apple 1.2: реакция на жалобу в течение 24 часов).
+            CREATE TABLE IF NOT EXISTS admin_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                target_type TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                detail TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             CREATE TABLE IF NOT EXISTS llm_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id TEXT NOT NULL,
@@ -206,6 +215,9 @@ def init_db() -> None:
             );
             """
         )
+        _add_column(connection, "reports", "snapshot", "TEXT")
+        _add_column(connection, "users", "banned_at", "TEXT")
+        _add_column(connection, "users", "ban_reason", "TEXT")
 
 
 def login_dev(name: str) -> tuple[str, sqlite3.Row]:
@@ -768,7 +780,7 @@ def board_rows(user_ids: list[str] | None = None) -> list[sqlite3.Row]:
             ORDER BY created_at DESC, rowid DESC LIMIT 1
         ) AS last_delta
         FROM users
-        WHERE provider IS NOT NULL
+        WHERE provider IS NOT NULL AND banned_at IS NULL
     """
     params: list = []
     if user_ids is not None:
@@ -824,3 +836,107 @@ def delete_league(code: str) -> None:
     with connect() as connection:
         connection.execute("DELETE FROM league_members WHERE code = ?", (code,))
         connection.execute("DELETE FROM leagues WHERE code = ?", (code,))
+
+
+# --- жалобы, блокировки, модерация ---
+
+
+def add_report(reporter_id: str, target_type: str, target_id: str, owner_id: str | None, reason: str, comment: str | None, snapshot: str | None) -> bool:
+    """True, если жалоба новая. Повторная открытая жалоба того же автора на ту же цель не создаётся."""
+    with connect() as connection:
+        cursor = connection.execute(
+            """
+            INSERT OR IGNORE INTO reports (id, reporter_id, target_type, target_id, target_owner_id, reason, comment, snapshot)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (uuid.uuid4().hex, reporter_id, target_type, target_id, owner_id, reason, comment, snapshot),
+        )
+        return cursor.rowcount == 1
+
+
+def attempt_row(attempt_id: str) -> sqlite3.Row | None:
+    with connect() as connection:
+        return connection.execute("SELECT * FROM attempts WHERE id = ?", (attempt_id,)).fetchone()
+
+
+def add_block(blocker_id: str, blocked_id: str) -> None:
+    with connect() as connection:
+        connection.execute("INSERT OR IGNORE INTO blocks (blocker_id, blocked_id) VALUES (?, ?)", (blocker_id, blocked_id))
+
+
+def remove_block(blocker_id: str, blocked_id: str) -> None:
+    with connect() as connection:
+        connection.execute("DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?", (blocker_id, blocked_id))
+
+
+def blocked_by(user_id: str) -> list[sqlite3.Row]:
+    with connect() as connection:
+        return connection.execute(
+            """
+            SELECT users.*, blocks.created_at AS blocked_at FROM blocks
+            JOIN users ON users.id = blocks.blocked_id
+            WHERE blocks.blocker_id = ?
+            ORDER BY blocks.created_at DESC, blocks.rowid DESC
+            """,
+            (user_id,),
+        ).fetchall()
+
+
+def blocked_ids(user_id: str) -> set[str]:
+    with connect() as connection:
+        return {row[0] for row in connection.execute("SELECT blocked_id FROM blocks WHERE blocker_id = ?", (user_id,))}
+
+
+def reports_list(status: str | None) -> list[sqlite3.Row]:
+    query = "SELECT * FROM reports"
+    params: tuple = ()
+    if status:
+        query += " WHERE status = ?"
+        params = (status,)
+    query += " ORDER BY created_at, rowid"
+    with connect() as connection:
+        return connection.execute(query, params).fetchall()
+
+
+def report_row(report_id: str) -> sqlite3.Row | None:
+    with connect() as connection:
+        return connection.execute("SELECT * FROM reports WHERE id = ?", (report_id,)).fetchone()
+
+
+def resolve_reports(where: str, params: tuple, resolution: str) -> int:
+    with connect() as connection:
+        cursor = connection.execute(
+            f"UPDATE reports SET status = 'resolved', resolution = ?, resolved_at = CURRENT_TIMESTAMP WHERE status = 'open' AND {where}",
+            (resolution, *params),
+        )
+        return cursor.rowcount
+
+
+def overdue_reports(hours: int) -> int:
+    with connect() as connection:
+        return connection.execute(
+            "SELECT COUNT(*) FROM reports WHERE status = 'open' AND created_at < datetime('now', ?)", (f"-{hours} hours",)
+        ).fetchone()[0]
+
+
+def set_ban(user_id: str, reason: str | None) -> None:
+    with connect() as connection:
+        if reason is None:
+            connection.execute("UPDATE users SET banned_at = NULL, ban_reason = NULL WHERE id = ?", (user_id,))
+        else:
+            connection.execute("UPDATE users SET banned_at = CURRENT_TIMESTAMP, ban_reason = ? WHERE id = ?", (reason, user_id))
+            # Забаненного выкидывает со всех устройств.
+            connection.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            connection.execute("DELETE FROM refresh_tokens WHERE user_id = ?", (user_id,))
+
+
+def reset_name(user_id: str) -> None:
+    with connect() as connection:
+        connection.execute("UPDATE users SET display_name = NULL WHERE id = ?", (user_id,))
+
+
+def log_admin(action: str, target_type: str, target_id: str, detail: str | None = None) -> None:
+    with connect() as connection:
+        connection.execute(
+            "INSERT INTO admin_log (action, target_type, target_id, detail) VALUES (?, ?, ?, ?)", (action, target_type, target_id, detail)
+        )
