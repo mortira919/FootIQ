@@ -567,3 +567,42 @@ tLoad(TRY_ORDER[0]);
     setInterval(() => { if (seen) step(); }, 2200);
   }
 }
+
+// --- PRO: period switch and the licence card that follows the pointer ---
+
+{
+  const PLANS = {
+    year: { price: "$29.99", per: "в год, выходит $2.50 в месяц" },
+    month: { price: "$4.99", per: "в месяц, отмена в любой момент" },
+  };
+  const buttons = [...document.querySelectorAll(".plan [data-plan]")];
+  const price = document.getElementById("pro-price");
+  const per = document.getElementById("pro-per");
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      for (const other of buttons) other.setAttribute("aria-checked", String(other === button));
+      price.textContent = PLANS[button.dataset.plan].price;
+      per.textContent = PLANS[button.dataset.plan].per;
+    });
+  }
+
+  const card = document.getElementById("pro-card");
+  const stage = card.parentElement;
+  if (!reduce && matchMedia("(hover: hover) and (pointer: fine)").matches) {
+    stage.addEventListener("pointermove", (event) => {
+      const box = card.getBoundingClientRect();
+      const x = (event.clientX - box.left) / box.width, y = (event.clientY - box.top) / box.height;
+      card.classList.add("tracking");
+      card.style.setProperty("--ry", `${(x - 0.5) * 14}deg`);
+      card.style.setProperty("--rx", `${(0.5 - y) * 10}deg`);
+      card.style.setProperty("--mx", `${x * 100}%`);
+      card.style.setProperty("--my", `${y * 100}%`);
+    });
+    stage.addEventListener("pointerleave", () => {
+      card.classList.remove("tracking");
+      for (const name of ["--rx", "--ry"]) card.style.setProperty(name, "0deg");
+      card.style.setProperty("--mx", "30%");
+      card.style.setProperty("--my", "20%");
+    });
+  }
+}
