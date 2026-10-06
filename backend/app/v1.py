@@ -402,7 +402,7 @@ class ReviewIn(Body):
 def review_login_enabled() -> None:
     # Выключенный вход неотличим от несуществующего пути: 404 раньше разбора тела запроса.
     if not review_login.enabled():
-        raise fail(404, "not_found", "Not Found")
+        raise fail(404, "not_found", "Вход для проверки сейчас выключен")
 
 
 @router.post("/auth/review", dependencies=[Depends(review_login_enabled)])

@@ -74,7 +74,7 @@
 
 | Метод и путь | Клиент отправляет | Сервер отдаёт |
 | --- | --- | --- |
-| `POST /v1/auth/review` | `{login, password}` | `{accessToken, refreshToken, user: Me}`, как `/auth/google`. Неверный логин или пароль: 401 `unauthorized` с `message` «Неверный логин или пароль». Больше 5 попыток в минуту с одного IP: 429. Вход выключен на сервере: 404 `not_found` на любой запрос |
+| `POST /v1/auth/review` | `{login, password}` | `{accessToken, refreshToken, user: Me}`, как `/auth/google`. Неверный логин или пароль: 401 `unauthorized` с `message` «Неверный логин или пароль». Больше 5 попыток в минуту с одного IP: 429. Вход выключен на сервере: 404 `not_found` с `message` «Вход для проверки сейчас выключен» на любой запрос |
 
 ```json
 {"login": "review@amplua.app", "password": "…"}
