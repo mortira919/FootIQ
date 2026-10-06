@@ -230,6 +230,16 @@ def init_db() -> None:
             )
             """
         )
+        # Запросы на удаление аккаунта через веб: хранится только SHA-256 токена из письма.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS deletion_requests (
+                token_hash TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         # Согласие на передачу ответа во внешнюю LLM (Apple 5.1.2(i)): время согласия или NULL.
         _add_column(connection, "users", "ai_consent_at", "TEXT")
 
@@ -685,7 +695,7 @@ def update_user(user_id: str, **fields) -> sqlite3.Row:
 
 
 # Таблицы, где строки игрока лежат в колонке user_id. Попытки включают ответы в Раздевалке (user_text, verdict).
-USER_TABLES = ("league_members", "attempts", "sessions", "refresh_tokens", "semantic_cache", "llm_log")
+USER_TABLES = ("league_members", "attempts", "sessions", "refresh_tokens", "semantic_cache", "llm_log", "deletion_requests")
 
 
 def delete_user(user_id: str) -> None:
@@ -1026,3 +1036,33 @@ def process_rc_event(event_id: str, event_type: str, app_user_id: str | None, us
         )
         apply(connection)
         return True
+
+
+# --- удаление аккаунта через веб ---
+
+DELETION_TTL_HOURS = 24
+
+
+def users_by_email(email: str) -> list[sqlite3.Row]:
+    with connect() as connection:
+        return connection.execute(
+            "SELECT * FROM users WHERE provider IS NOT NULL AND lower(email) = lower(?)", (email.strip(),)
+        ).fetchall()
+
+
+def add_deletion_request(token_hash: str, user_id: str) -> None:
+    with connect() as connection:
+        connection.execute("INSERT INTO deletion_requests (token_hash, user_id) VALUES (?, ?)", (token_hash, user_id))
+
+
+def deletion_user(token_hash: str) -> str | None:
+    """Игрок по токену из письма, если ссылке меньше суток. Ссылка одноразовая: запрос удаляется вместе с аккаунтом."""
+    with connect() as connection:
+        row = connection.execute(
+            """
+            SELECT user_id FROM deletion_requests
+            WHERE token_hash = ? AND created_at > datetime('now', ?)
+            """,
+            (token_hash, f"-{DELETION_TTL_HOURS} hours"),
+        ).fetchone()
+    return row["user_id"] if row else None

@@ -19,7 +19,7 @@
   <h1>Удаление аккаунта Amplua</h1>
   <p class="date">Приложение Amplua, разработчик Команда Amplua</p>
 
-  <p>Удалить аккаунт и все данные можно двумя способами. Второй подходит, если приложения на телефоне уже нет.</p>
+  <p>Удалить аккаунт и все данные можно двумя способами. Второй подходит, если приложения на телефоне уже нет. В обоих случаях данные стираются сразу после подтверждения.</p>
 
   <section class="box" aria-labelledby="in-app">
     <h2 id="in-app">В приложении</h2>
@@ -31,25 +31,25 @@
     <p>Данные стираются с сервера сразу, приложение выходит из аккаунта.</p>
   </section>
 
-  <section class="box" aria-labelledby="by-mail">
-    <h2 id="by-mail">Без приложения, по почте</h2>
-    <p>Напиши нам с адреса, к которому привязан аккаунт Google или Apple. В теме письма укажи «Удаление аккаунта Amplua».</p>
-    <div class="copy">
-      <span class="mono">amplua.support@gmail.com</span>
-      <button class="btn small ghost" type="button" data-copy="amplua.support@gmail.com">Скопировать адрес</button>
-      <span class="ok" role="status" hidden>Скопировано</span>
-    </div>
-    <a class="btn" href="mailto:amplua.support@gmail.com?subject=%D0%A3%D0%B4%D0%B0%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5%20%D0%B0%D0%BA%D0%BA%D0%B0%D1%83%D0%BD%D1%82%D0%B0%20Amplua&amp;body=%D0%9F%D1%80%D0%BE%D1%88%D1%83%20%D1%83%D0%B4%D0%B0%D0%BB%D0%B8%D1%82%D1%8C%20%D0%BC%D0%BE%D0%B9%20%D0%B0%D0%BA%D0%BA%D0%B0%D1%83%D0%BD%D1%82%20Amplua%20%D0%B8%20%D0%B2%D1%81%D0%B5%20%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D0%B5.%0A%D0%92%D1%85%D0%BE%D0%B4%20%D0%B1%D1%8B%D0%BB%20%D1%87%D0%B5%D1%80%D0%B5%D0%B7%3A%20Google%20%2F%20Apple%0A%D0%98%D0%BC%D1%8F%20%D0%B8%D0%B3%D1%80%D0%BE%D0%BA%D0%B0%20(%D0%B5%D1%81%D0%BB%D0%B8%20%D0%BF%D0%BE%D0%BC%D0%BD%D0%B8%D1%88%D1%8C)%3A%20">Написать письмо</a>
-    <p>Мы проверим, что письмо пришло с адреса аккаунта, удалим данные в течение 7 дней и ответим, когда всё готово. Если ты входил через Apple со скрытым адресом, напиши с любой почты и укажи имя игрока и примерную дату регистрации. Тогда мы можем попросить подтвердить, что аккаунт твой.</p>
+  <section class="box" aria-labelledby="by-web">
+    <h2 id="by-web">Без приложения, через эту страницу</h2>
+    <p>Введи адрес почты, к которому привязан аккаунт Google или Apple. Мы пришлём письмо со ссылкой. Открой её и подтверди удаление: данные сотрутся сразу. Ссылка действует 24 часа.</p>
+    <form class="request" method="post" action="/delete-account">
+      <label for="email">Почта аккаунта</label>
+      <input id="email" name="email" type="email" autocomplete="email" inputmode="email" required maxlength="320" placeholder="name@gmail.com">
+      <button class="btn" type="submit">Прислать ссылку</button>
+    </form>
+    <p>Если ты входил через Apple со скрытым адресом (…@privaterelay.appleid.com или …@private.icloud.com), введи его: письмо придёт на твою настоящую почту через переадресацию Apple. Не помнишь адрес или письмо не приходит, напиши на <a href="mailto:amplua.support@gmail.com?subject=%D0%A3%D0%B4%D0%B0%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5%20%D0%B0%D0%BA%D0%BA%D0%B0%D1%83%D0%BD%D1%82%D0%B0%20Amplua">amplua.support@gmail.com</a>, удалим вручную в течение 7 дней.</p>
   </section>
 
   <h2>Что удаляется</h2>
   <ul>
     <li>Профиль: идентификатор Google или Apple, email, имя игрока, амплуа, регион, часовой пояс.</li>
-    <li>Все решения в сценах, ответы в разборах и история попыток.</li>
+    <li>Все решения в сценах, ответы в Раздевалке, разборы тренера и история попыток, согласие на передачу ответов ИИ-сервису и журнал запросов к нему.</li>
     <li>Общий рейтинг, рейтинги по амплуа, серия дней, место в таблицах.</li>
-    <li>Участие в лигах. Лиги, которые ты создал, удаляются вместе с таблицей.</li>
-    <li>Сессии на всех устройствах. Если вход был через Apple, мы отзываем доступ приложения к Apple ID.</li>
+    <li>Участие в лигах. Лиги, которые ты создал, удаляются у всех участников вместе с таблицей.</li>
+    <li>Жалобы и блокировки, которые ты отправил, и жалобы на тебя.</li>
+    <li>Сессии на всех устройствах. Если вход был через Apple, мы отзываем доступ приложения к Apple ID. Запись о тебе в платёжном сервисе RevenueCat тоже удаляется.</li>
   </ul>
 
   <h2>Что остаётся и сколько</h2>
@@ -69,20 +69,10 @@
     <nav aria-label="Документы">
       <a href="/privacy">Политика конфиденциальности</a>
       <a href="/terms">Условия использования</a>
-      <a href="/delete">Удаление аккаунта</a>
+      <a href="/delete-account">Удаление аккаунта</a>
       <a href="mailto:amplua.support@gmail.com">amplua.support@gmail.com</a>
     </nav>
   </div>
 </footer>
-<script>
-  for (const b of document.querySelectorAll("[data-copy]")) {
-    b.addEventListener("click", async () => {
-      const ok = b.parentElement.querySelector(".ok");
-      try { await navigator.clipboard.writeText(b.dataset.copy); ok.textContent = "Скопировано"; }
-      catch { ok.textContent = "Не вышло скопировать, выдели адрес вручную"; }
-      ok.hidden = false;
-    });
-  }
-</script>
 </body>
 </html>

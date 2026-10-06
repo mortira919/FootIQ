@@ -188,9 +188,6 @@ def terms() -> FileResponse:
     return FileResponse(SITE / "terms.html")
 
 
-@app.get("/delete", include_in_schema=False)
-def delete_account() -> FileResponse:
-    return FileResponse(SITE / "delete.html")
 
 
 @app.get("/l/{code}", include_in_schema=False)
@@ -507,9 +504,10 @@ from app import v1  # noqa: E402  (v1 берёт хелперы из этого 
 
 app.include_router(v1.router)
 
-from app import admin  # noqa: E402
+from app import admin, web_delete  # noqa: E402
 
 app.include_router(admin.router)
+app.include_router(web_delete.router)
 app.add_exception_handler(StarletteHTTPException, v1.http_error)
 app.add_exception_handler(RequestValidationError, v1.validation_error)
 app.add_exception_handler(Exception, v1.server_error)
