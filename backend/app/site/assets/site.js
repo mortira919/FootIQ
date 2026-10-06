@@ -486,3 +486,84 @@ tLoad(TRY_ORDER[0]);
   if (reduce) { ring.style.setProperty("--gone", "0.43"); digit.textContent = "4"; clock.textContent = "2:41"; steps.forEach((s, i) => s.classList.toggle("on", i < 2)); }
   else { tick(); setInterval(tick, 1000); }
 }
+
+// --- Rating: a sample leaderboard where your row climbs as you solve scenes ---
+
+{
+  // Sample players (labelled on the page as invented). base = places above the shown slice.
+  const TABLES = {
+    global: { base: 1280, peers: [["Мирон Ш.", "CM", 1412], ["Тимур Б.", "ST", 1356], ["Даня В.", "AM", 1298], ["Егор Л.", "CB", 1240], ["Саня К.", "RW", 1187], ["Артём П.", "DM", 1131], ["Ильдар Х.", "GK", 1068], ["Вова Ж.", "LB", 1015]] },
+    region: { base: 214, peers: [["Гриша М.", "AM", 1390], ["Паша О.", "CM", 1322], ["Никита Р.", "LW", 1276], ["Лёша Ф.", "CB", 1203], ["Рустам И.", "SS", 1159], ["Кирилл Д.", "RB", 1097], ["Стас В.", "DM", 1044], ["Олег С.", "GK", 990]] },
+    league: { base: 0, peers: [["Костя", "ST", 1208], ["Макс", "CM", 1164], ["Рома", "CB", 1103], ["Гоша", "RM", 1051], ["Лёха", "GK", 1002], ["Дэн", "LB", 948]] },
+  };
+  const START = 962, STOP = 1440;
+  const rowsEl = document.getElementById("lb-rows");
+  const eloEl = document.getElementById("lb-elo");
+  const deltaEl = document.getElementById("lb-delta");
+  const ranks = [...document.querySelectorAll("#lb-ranks li")];
+  const tabs = [...document.querySelectorAll(".tabs [data-tab]")];
+  let tab = "global", you = START, hold = 0;
+  const fmt = (n) => n.toLocaleString("ru-RU");
+
+  function render(animate) {
+    const t = TABLES[tab];
+    const list = [...t.peers.map(([name, pos, r]) => ({ name, pos, r })), { name: "Ты", pos: "DM", r: you, you: true }].sort((a, b) => b.r - a.r);
+    const before = new Map([...rowsEl.children].map((li) => [li.dataset.key, li.getBoundingClientRect().top]));
+    const keep = new Map([...rowsEl.children].map((li) => [li.dataset.key, li]));
+    rowsEl.replaceChildren(...list.map((p, i) => {
+      const li = keep.get(p.name) || document.createElement("li");
+      li.dataset.key = p.name;
+      li.className = `row${p.you ? " you" : ""}${t.base + i === 0 ? " top" : ""}`;
+      li.innerHTML = `<span class="place mono">${fmt(t.base + i + 1)}</span><span class="name">${p.name}</span><span class="pos mono">${p.pos}</span><span class="r mono">${fmt(p.r)}</span>`;
+      return li;
+    }));
+    if (!animate) return;
+    for (const li of rowsEl.children) {
+      const was = before.get(li.dataset.key);
+      if (was == null) continue;
+      const dy = was - li.getBoundingClientRect().top;
+      if (!dy) continue;
+      li.style.transition = "none";
+      li.style.transform = `translateY(${dy}px)`;
+      li.getBoundingClientRect();
+      li.style.transition = "";
+      li.style.transform = "";
+    }
+  }
+
+  function showRating() {
+    eloEl.textContent = fmt(you);
+    const now = ranks.find((li) => you >= +li.dataset.min);
+    for (const li of ranks) {
+      li.classList.toggle("now", li === now);
+      li.classList.toggle("passed", li !== now && you >= +li.dataset.min);
+    }
+  }
+
+  function step() {
+    if (hold > 0) { hold--; if (hold === 0) { you = START; render(false); showRating(); } return; }
+    const gain = 12 + Math.floor(Math.random() * 15);
+    you += gain;
+    deltaEl.textContent = `+${gain}`;
+    deltaEl.classList.add("show");
+    setTimeout(() => deltaEl.classList.remove("show"), 1100);
+    render(true);
+    showRating();
+    if (you >= STOP) hold = 2;
+  }
+
+  for (const b of tabs) b.addEventListener("click", () => {
+    tab = b.dataset.tab;
+    for (const x of tabs) x.setAttribute("aria-selected", String(x === b));
+    render(false);
+  });
+
+  render(false);
+  showRating();
+  if (reduce) { you = 1187; render(false); showRating(); }
+  else {
+    let seen = false;
+    new IntersectionObserver(([e]) => { seen = e.isIntersecting; }).observe(rowsEl);
+    setInterval(() => { if (seen) step(); }, 2200);
+  }
+}

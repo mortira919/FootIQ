@@ -157,27 +157,34 @@
 
   <section class="section" id="rating" aria-labelledby="rating-title">
     <h2 id="rating-title">Рейтинг как в шахматах</h2>
-    <p class="intro">Каждое амплуа считается отдельно, плюс общий рейтинг по всем позициям. Новый игрок начинает с 800.</p>
-    <div class="ladder-wrap">
-      <ol class="ladder" reversed aria-label="Звания по общему рейтингу">
-        <li class="step top" style="--w:100%"><span>UEFA Pro</span><span class="mono">1800+</span></li>
-        <li class="step" style="--w:88%"><span>Элита</span><span class="mono">1600</span></li>
-        <li class="step" style="--w:76%"><span>Профи</span><span class="mono">1400</span></li>
-        <li class="step" style="--w:64%"><span>Полупрофи</span><span class="mono">1200</span></li>
-        <li class="step" style="--w:52%"><span>Любитель</span><span class="mono">1000</span></li>
-        <li class="step you" style="--w:40%"><span>Новичок, ты здесь</span><span class="mono">800</span></li>
-      </ol>
-      <div>
-        <div class="side">
-          <h3>Таблицы</h3>
-          <p>Общая таблица, таблица твоего региона и отдельная по каждому амплуа.</p>
+    <p class="intro">Каждое амплуа считается отдельно, плюс общий рейтинг. Решаешь сцены, рейтинг растёт, и ты обгоняешь соперников в таблице.</p>
+    <div class="rating">
+      <div class="lb">
+        <div class="tabs" role="tablist" aria-label="Таблица">
+          <button type="button" role="tab" aria-selected="true" data-tab="global">Общая</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="region">Россия</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="league">Лига K7QM4P</button>
         </div>
-        <div class="side">
+        <ol class="rows" id="lb-rows"></ol>
+        <p class="note">Пример таблицы, имена вымышленные.</p>
+      </div>
+      <aside class="rank-card">
+        <p class="label">Твой общий рейтинг</p>
+        <p class="elo"><span class="mono" id="lb-elo">962</span><span class="delta mono" id="lb-delta"></span></p>
+        <ol class="ranks" id="lb-ranks" aria-label="Звания">
+          <li data-min="1800"><span>UEFA Pro</span><span class="mono">1800</span></li>
+          <li data-min="1600"><span>Элита</span><span class="mono">1600</span></li>
+          <li data-min="1400"><span>Профи</span><span class="mono">1400</span></li>
+          <li data-min="1200"><span>Полупрофи</span><span class="mono">1200</span></li>
+          <li data-min="1000"><span>Любитель</span><span class="mono">1000</span></li>
+          <li data-min="0"><span>Новичок</span><span class="mono">0</span></li>
+        </ol>
+        <div class="league">
           <h3>Лиги для своих</h3>
-          <p>Создай лигу, отправь друзьям код и следите за своей таблицей. Вступить можно в разделе «Рейтинг».</p>
+          <p>Создай лигу и отправь друзьям код. Своя таблица только для вас, вступить можно в разделе «Рейтинг».</p>
           <span class="code" aria-label="Пример кода лиги">K7QM4P</span>
         </div>
-      </div>
+      </aside>
     </div>
   </section>
 
