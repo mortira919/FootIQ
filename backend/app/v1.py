@@ -34,6 +34,7 @@ from app.store import (
     attempt_row,
     blocked_by,
     blocked_ids,
+    bind_reviewer,
     cancel_session,
     log_llm,
     set_ai_consent,
@@ -371,6 +372,8 @@ def auth_google(
     body: GoogleIn, _: None = Depends(limit_ip), x_timezone_offset: str | None = Header(default=None)
 ) -> dict:
     claims = verify_identity("google", body.idToken)
+    if claims.get("email") and claims.get("email_verified") is True:
+        bind_reviewer("google", claims["sub"], claims["email"])
     return _session(*login_provider("google", claims["sub"], claims.get("email"), None), x_timezone_offset)
 
 
@@ -784,7 +787,8 @@ def board(rows, me_id: str, limit: int, hidden: set[str] = frozenset()) -> dict:
 @router.get("/leaderboards/{scope}")
 def leaderboard(scope: str, limit: int = 100, region: str | None = None, row=Depends(player)) -> dict:
     limit = max(1, min(limit, 100))
-    rows = board_rows()
+    # Служебные участники лиг ревьюера видны только в его лигах.
+    rows = [item for item in board_rows() if not item["review_bot"]]
     if scope == "regional":
         region = region or REGION_NAMES.get(row["country"])
         if region not in REGIONS:

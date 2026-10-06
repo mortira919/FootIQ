@@ -240,6 +240,9 @@ def init_db() -> None:
             )
             """
         )
+        # Аккаунт ревьюера сторов (review = 1) и служебные участники его лиг (review_bot = 1).
+        _add_column(connection, "users", "review", "INTEGER NOT NULL DEFAULT 0")
+        _add_column(connection, "users", "review_bot", "INTEGER NOT NULL DEFAULT 0")
         # Согласие на передачу ответа во внешнюю LLM (Apple 5.1.2(i)): время согласия или NULL.
         _add_column(connection, "users", "ai_consent_at", "TEXT")
 
@@ -1066,3 +1069,22 @@ def deletion_user(token_hash: str) -> str | None:
             (token_hash, f"-{DELETION_TTL_HOURS} hours"),
         ).fetchone()
     return row["user_id"] if row else None
+
+
+# --- аккаунт ревьюера ---
+
+
+def bind_reviewer(provider: str, sub: str, email: str) -> bool:
+    """Первый вход тестовой учёткой: заготовка, созданная scripts/seed_reviewer.py, получает sub провайдера.
+
+    Привязка только для строк review = 1 без sub, поэтому чужой аккаунт по email так не захватить.
+    """
+    with locked() as connection:
+        taken = connection.execute("SELECT 1 FROM users WHERE provider = ? AND sub = ?", (provider, sub)).fetchone()
+        if taken:
+            return False
+        cursor = connection.execute(
+            "UPDATE users SET sub = ? WHERE provider = ? AND sub IS NULL AND review = 1 AND lower(email) = lower(?)",
+            (sub, provider, email),
+        )
+        return cursor.rowcount == 1

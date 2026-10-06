@@ -649,7 +649,7 @@ class Matrix(unittest.TestCase):
         self.assertEqual(board["me"], next(item for item in board["players"] if item["isMe"]))
         self.assertEqual((board["me"]["rank"], board["me"]["elo"]), (7, 89940))
         self.assertEqual([item["id"] for item in board["players"][:3]], [who["user"]["id"] for who in top[:3]])
-        self.assertEqual(board["total"], sql("SELECT COUNT(*) AS n FROM users WHERE provider IS NOT NULL AND primary_position IS NOT NULL")[0]["n"])
+        self.assertEqual(board["total"], sql("SELECT COUNT(*) AS n FROM users WHERE provider IS NOT NULL AND primary_position IS NOT NULL AND review_bot = 0 AND banned_at IS NULL")[0]["n"])
         self.assertEqual(set(board["players"][0]), {"id", "rank", "name", "position", "elo", "region", "delta", "isMe"})
 
         newcomer = self.login()
