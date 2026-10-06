@@ -5,9 +5,9 @@ import time
 from collections import defaultdict
 from datetime import date, datetime, timezone
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pathlib import Path
@@ -48,7 +48,30 @@ STATIC = Path(__file__).resolve().parent / "static"
 SITE = Path(__file__).resolve().parent / "site"
 PUZZLES = load_puzzles()
 VIDEOS = load_videos()
-app = FastAPI(title="FootIQ", version="0.2.0")
+app = FastAPI(title="Amplua", version="0.3.0")
+
+# Пути стенда: dev-вход по имени, старый API без /v1, документация. На проде (AMPLUA_ENV=prod) их нет.
+STAND_ONLY = (
+    "/stand", "/positions", "/auth/dev-login", "/users", "/puzzles", "/attempts", "/leaderboards", "/leagues",
+    "/docs", "/redoc", "/openapi.json",
+)
+
+
+def is_prod() -> bool:
+    return os.environ.get("AMPLUA_ENV") == "prod"
+
+
+@app.middleware("http")
+async def prod_and_head(request: Request, call_next):
+    path = request.url.path
+    if is_prod() and any(path == prefix or path.startswith(prefix + "/") for prefix in STAND_ONLY):
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+    if request.method != "HEAD":
+        return await call_next(request)
+    # HEAD ведёт себя как GET без тела (RFC 9110): `curl -I /v1/me` без токена отвечает 401, а не 405.
+    request.scope["method"] = "GET"
+    response = await call_next(request)
+    return Response(status_code=response.status_code, headers=dict(response.headers))
 
 
 @app.on_event("startup")

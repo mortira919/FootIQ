@@ -1,0 +1,30 @@
+# Прод Amplua: отдельное приложение, своя база, без стенда и dev-входа (AMPLUA_ENV=prod).
+# Деплой из backend/: flyctl deploy --config fly.prod.toml --ha=false --remote-only
+# Стенд остаётся в fly.toml (приложение footiq).
+app = "amplua-api"
+primary_region = "fra"
+
+[env]
+  AMPLUA_ENV = "prod"
+  FOOTIQ_DB = "/data/amplua.sqlite"
+  # Адрес для ссылок в письмах удаления аккаунта. Заменить на домен, когда он будет выбран (api.amplua.app).
+  PUBLIC_URL = "https://amplua-api.fly.dev"
+
+[[mounts]]
+  source = "amplua_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Прод работает всё время ревью (Apple 2.1(a)): машина не засыпает.
+  # ponytail: одна машина, потому что SQLite на одном volume; для нескольких машин нужен Postgres
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
