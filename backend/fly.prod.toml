@@ -7,8 +7,8 @@ primary_region = "fra"
 [env]
   AMPLUA_ENV = "prod"
   FOOTIQ_DB = "/data/amplua.sqlite"
-  # Адрес для ссылок в письмах удаления аккаунта. Заменить на домен, когда он будет выбран (api.amplua.app).
-  PUBLIC_URL = "https://amplua-api.fly.dev"
+  # Домен amplua.app целиком смотрит на прод: API (/v1), сайт, /privacy, /terms, /delete-account, /l/<код>.
+  PUBLIC_URL = "https://amplua.app"
 
 [[mounts]]
   source = "amplua_data"
