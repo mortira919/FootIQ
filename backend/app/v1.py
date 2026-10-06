@@ -15,11 +15,14 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app import apple, notify
+import hashlib
+import time as clock
+
+from app import apple, llm, notify
 from app.accounts import erase_account
 from app.elo import score_for
 from app.geometry import judge
-from app.moderation import is_offensive
+from app.moderation import is_harmful, is_offensive
 from app.main import PUZZLES, VIDEOS, _daily_for, _hit, limit_ip
 from app.radar import POINTS
 from app.store import (
@@ -31,6 +34,11 @@ from app.store import (
     attempt_row,
     blocked_by,
     blocked_ids,
+    cancel_session,
+    log_llm,
+    set_ai_consent,
+    shared_grade,
+    store_grade,
     remove_block,
     _zone,
     attempts_for_radar,
@@ -307,6 +315,7 @@ def me_payload(row) -> dict:
         "rushBest": stats["rush_best"] or 0,
         "attemptsLeft": {"polygon": None, **left},
         "sessionsCount": stats["sessions"],
+        "aiConsentAt": _iso(row["ai_consent_at"]) if row["ai_consent_at"] else None,
     }
 
 
@@ -406,6 +415,7 @@ class MePatch(Body):
     position: Short | None = None
     region: Short | None = None
     coach: Short | None = None
+    aiConsent: bool | None = None
 
 
 @router.get("/me")
@@ -442,6 +452,8 @@ def patch_me(body: MePatch, row=Depends(player)) -> dict:
             raise fail(403, "position_locked", f"Сменить амплуа можно через {days} дн.", daysLeft=days)
     if fields:
         row = update_user(row["id"], **fields)
+    if body.aiConsent is not None:
+        row = set_ai_consent(row["id"], body.aiConsent)
     return me_payload(row)
 
 
@@ -481,6 +493,7 @@ def start_mode(mode: str, body: StartIn | None = None, row=Depends(player)) -> d
     position = _position(row)
     puzzle_id = "rush"
     if mode == "video":
+        _require_ai_consent(row)
         puzzle = VIDEOS.get(body.puzzleId if body else "")
         if puzzle is None or position not in puzzle["target_positions"]:
             raise invalid("Видеозадача не найдена для твоего амплуа")
@@ -491,6 +504,14 @@ def start_mode(mode: str, body: StartIn | None = None, row=Depends(player)) -> d
     except QuotaExceeded:
         raise fail(403, "limit_reached", "Попытки на сегодня закончились. Завтра будут новые или открой PRO")
     return {"sessionId": session_id, "attemptsLeft": None if limit is None else limit - used}
+
+
+AI_CONSENT_MESSAGE = "Чтобы тренер оценил ответ, нужно согласие на передачу текста ответа ИИ-сервису"
+
+
+def _require_ai_consent(row) -> None:
+    if not row["ai_consent_at"]:
+        raise fail(403, "ai_consent_required", AI_CONSENT_MESSAGE)
 
 
 def _session_or_fail(row, session_id: str, mode: str):
@@ -624,11 +645,80 @@ def video_puzzle(row=Depends(player)) -> dict:
     return video_out(pool[local_today(row).toordinal() % len(pool)])
 
 
+ROLE_TITLES = {
+    "gk": "вратарь", "cb": "центральный защитник", "rb/lb": "крайний защитник", "dm": "опорный полузащитник",
+    "cm": "центральный полузащитник", "am": "атакующий полузащитник", "lm/rm": "крайний полузащитник",
+    "lw/rw": "вингер", "st": "центральный нападающий", "ss": "оттянутый нападающий",
+}
+
+
+def _text_key(letter: str, answer: str) -> str:
+    """Ключ семантического кэша: выбранный вариант и ответ без регистра, пунктуации и лишних пробелов."""
+    words = re.findall(r"[0-9a-zа-яё]+", answer.lower())
+    return letter + ":" + hashlib.sha256(" ".join(words).encode()).hexdigest()
+
+
+def _llm_task(puzzle: dict, letter: str) -> dict:
+    return {
+        "title": puzzle["title"],
+        "situation": puzzle.get("ground_truth", ""),
+        "options": puzzle["options"],
+        "chosen": letter,
+        "correct": "ABC"[puzzle["correct"]],
+        "factors": [factor["name"] for factor in puzzle["factors"]],
+        "role_hints": puzzle.get("role_keywords", []),
+    }
+
+
+def _safe(graded: dict) -> bool:
+    texts = [graded["reply"], *(item["text"] for item in graded["checklist"])]
+    return not any(is_harmful(text) for text in texts)
+
+
+def grade_answer(row, session_id: str, puzzle: dict, letter: str, answer: str, coach: str) -> dict:
+    """Оценка ответа: общий кэш, затем LLM, при сбое или недопустимом ответе запасная рубрика grade().
+
+    Возвращает {score, checklist, reply}. Текст ответа игрока в кэш и в журнал не попадает.
+    """
+    persona = COACHES[coach]
+    key = _text_key(letter, answer)
+    position = puzzle["target_positions"][0]
+    cached = shared_grade(puzzle["id"], position, persona, key)
+    if cached is not None:
+        if llm.configured():
+            log_llm(row["id"], session_id, llm.provider(), "cache", 0)
+        return cached
+    if llm.configured():
+        started = clock.monotonic()
+        status = "ok"
+        try:
+            graded = llm.grade_with_llm(answer, ROLE_TITLES.get(position, position), _llm_task(puzzle, letter), persona)
+            if not _safe(graded):
+                status, graded = "filtered", None
+        except llm.LLMError:
+            log.exception("LLM не оценила ответ, беру запасную рубрику")
+            status, graded = "error", None
+        except Exception:
+            log.exception("LLM упала, беру запасную рубрику")
+            status, graded = "error", None
+        log_llm(row["id"], session_id, llm.provider(), status, int((clock.monotonic() - started) * 1000))
+        if graded is not None:
+            # В кэш только checklist, reply и score: ответ игрока там не хранится.
+            store_grade(puzzle["id"], position, persona, key, row["id"], graded)
+            return graded
+    fallback = grade(puzzle, letter, answer, persona)
+    return {"score": fallback["score"], "checklist": fallback["checklist"], "reply": fallback["coach_reply"]}
+
+
 @router.post("/attempts/video")
 def attempt_video(body: VideoIn, row=Depends(player)) -> dict:
     session = _session_or_fail(row, body.sessionId, "video")
     if session["puzzle_id"] != body.puzzleId:
         raise invalid("Сессия открыта для другого видео")
+    if not row["ai_consent_at"]:
+        # Согласие отозвали после старта: попытку возвращаем, текст никуда не уходит.
+        cancel_session(row["id"], session["id"])
+        raise fail(403, "ai_consent_required", AI_CONSENT_MESSAGE)
     puzzle = VIDEOS[body.puzzleId]
     if session["outcome"] == "start":
         if body.choice not in (0, 1, 2):
@@ -638,9 +728,9 @@ def attempt_video(body: VideoIn, row=Depends(player)) -> dict:
             raise invalid("Объясни решение хотя бы в 10 символов")
         coach = coach_of(row)
         letter = "ABC"[body.choice]
-        # ponytail: оценка рубрикой по словам, LLM подключить вместо grade()
-        graded = grade(puzzle, letter, answer, COACHES[coach])
-        review = {"choice": letter, "answer": answer, "checklist": graded["checklist"], "coach": coach, "reply": graded["coach_reply"]}
+        graded = grade_answer(row, session["id"], puzzle, letter, answer, coach)
+        # answer всегда текст этого игрока, даже если checklist и reply взяты из кэша чужого разбора.
+        review = {"choice": letter, "answer": answer, "checklist": graded["checklist"], "coach": coach, "reply": graded["reply"]}
         summary = {"score": graded["score"], "review": review, "correct": puzzle["correct"]}
         session = finish_session(session["id"], puzzle["difficulty"], graded["score"] / 10, "video", letter, answer, summary)
     stored = json.loads(session["verdict"])

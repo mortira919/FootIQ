@@ -116,7 +116,7 @@ class DeleteAndApple(unittest.TestCase):
         doomed = self.google()
         me = doomed["user"]
         uid = me["id"]
-        self.call("PATCH", "/v1/me", doomed, json={"position": "dm", "name": "Удаляемый"})
+        self.call("PATCH", "/v1/me", doomed, json={"position": "dm", "name": "Удаляемый", "aiConsent": True})
 
         # Попытки: полигон, задача дня (серия) и видеоразбор с текстом ответа.
         self.call("POST", "/v1/attempts/polygon", doomed, json={"sceneId": "dm", "target": None})

@@ -218,6 +218,8 @@ def init_db() -> None:
         _add_column(connection, "reports", "snapshot", "TEXT")
         _add_column(connection, "users", "banned_at", "TEXT")
         _add_column(connection, "users", "ban_reason", "TEXT")
+        # Согласие на передачу ответа во внешнюю LLM (Apple 5.1.2(i)): время согласия или NULL.
+        _add_column(connection, "users", "ai_consent_at", "TEXT")
 
 
 def login_dev(name: str) -> tuple[str, sqlite3.Row]:
@@ -939,4 +941,41 @@ def log_admin(action: str, target_type: str, target_id: str, detail: str | None 
     with connect() as connection:
         connection.execute(
             "INSERT INTO admin_log (action, target_type, target_id, detail) VALUES (?, ?, ?, ?)", (action, target_type, target_id, detail)
+        )
+
+
+# --- ИИ-тренер ---
+
+
+def set_ai_consent(user_id: str, consent: bool) -> sqlite3.Row:
+    with connect() as connection:
+        if consent:
+            # Повторное «да» не переписывает время первого согласия.
+            connection.execute("UPDATE users SET ai_consent_at = COALESCE(ai_consent_at, ?) WHERE id = ?", (now_stamp(), user_id))
+        else:
+            connection.execute("UPDATE users SET ai_consent_at = NULL WHERE id = ?", (user_id,))
+        return _user(connection, user_id)
+
+
+def cancel_session(user_id: str, session_id: str) -> None:
+    """Возвращает попытку: незавершённая сессия удаляется и не считается в дневной лимит."""
+    with connect() as connection:
+        connection.execute("DELETE FROM attempts WHERE id = ? AND user_id = ? AND outcome = 'start'", (session_id, user_id))
+
+
+def shared_grade(puzzle_id: str, position: str, persona: str, text_key: str) -> dict | None:
+    """Семантический кэш общий для всех игроков: тот же эпизод, амплуа, тренер и тот же по смыслу ответ."""
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT response FROM semantic_cache WHERE puzzle_id = ? AND position = ? AND persona = ? AND text_key = ? LIMIT 1",
+            (puzzle_id, position, persona, text_key),
+        ).fetchone()
+    return json.loads(row["response"]) if row else None
+
+
+def log_llm(user_id: str, attempt_id: str | None, provider: str, status: str, duration_ms: int | None) -> None:
+    with connect() as connection:
+        connection.execute(
+            "INSERT INTO llm_log (user_id, attempt_id, provider, status, duration_ms) VALUES (?, ?, ?, ?, ?)",
+            (user_id, attempt_id, provider, status, duration_ms),
         )

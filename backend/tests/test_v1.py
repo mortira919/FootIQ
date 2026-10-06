@@ -52,7 +52,7 @@ class V1(unittest.TestCase):
 
     def player(self, position: str = "fb") -> dict:
         who = self.login()
-        self.call("PATCH", "/v1/me", who, json={"position": position})
+        self.call("PATCH", "/v1/me", who, json={"position": position, "aiConsent": True})
         return who
 
     def test_login_refresh_logout_delete(self):

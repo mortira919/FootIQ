@@ -115,7 +115,8 @@ class Matrix(unittest.TestCase):
 
     def player(self, role: str = "fb") -> dict:
         who = self.login()
-        self.call("PATCH", "/v1/me", who, json={"position": role})
+        # Видеоразбор требует согласия на передачу ответа ИИ (аудит, задача 7).
+        self.call("PATCH", "/v1/me", who, json={"position": role, "aiConsent": True})
         return who
 
     def pro(self, who: dict, days: int = 5) -> None:
@@ -304,7 +305,7 @@ class Matrix(unittest.TestCase):
         expected = {
             "id", "name", "email", "provider", "position", "positionLockDays", "region", "coach", "isPro", "elo",
             "positionElo", "eloHistory", "radar", "streak", "streakWeek", "dailyDone", "daily", "rushBest",
-            "attemptsLeft", "sessionsCount",
+            "attemptsLeft", "sessionsCount", "aiConsentAt",
         }
         self.assertEqual(set(me), expected)
         self.assertEqual(
@@ -313,7 +314,7 @@ class Matrix(unittest.TestCase):
                 "provider": "google", "position": None, "positionLockDays": None, "region": "Россия", "coach": "base",
                 "isPro": False, "elo": 800, "positionElo": {}, "eloHistory": [800] * 8, "radar": [None] * 5,
                 "streak": 0, "streakWeek": [False] * 7, "dailyDone": False, "daily": None, "rushBest": 0,
-                "attemptsLeft": {"polygon": None, "rush": 2, "video": 1}, "sessionsCount": 0,
+                "attemptsLeft": {"polygon": None, "rush": 2, "video": 1}, "sessionsCount": 0, "aiConsentAt": None,
             },
         )
 
