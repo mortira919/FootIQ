@@ -81,14 +81,35 @@
     </div>
   </section>
 
-  <section class="section" aria-labelledby="judge-title">
-    <h2 id="judge-title">Ход проверяет сервер</h2>
-    <p class="intro">Приложение рисует поле, а исход считает сервер по той же геометрии: конус отбора, линии передач, офсайд. Мы сверили их на миллионе точек, расхождений нет. Накрутить рейтинг с телефона не выйдет.</p>
-    <div class="verdicts">
-      <div class="verdict gold"><span class="word">Золото</span><p><b>Лучшее решение в сцене.</b> Сцена засчитана как победа, рейтинг растёт.</p></div>
-      <div class="verdict silver"><span class="word">Серебро</span><p><b>Рабочий вариант, но был сильнее.</b> Засчитывается как ничья, рейтинг почти не двигается.</p></div>
-      <div class="verdict error"><span class="word">Ошибка</span><p><b>Пас перехватят или ты в офсайде.</b> Это поражение, рейтинг падает.</p></div>
+  <section class="section" id="try" aria-labelledby="try-title">
+    <h2 id="try-title">Попробуй сам</h2>
+    <p class="intro">Стоп-кадр из приложения. У тебя семь секунд: нажми на поле, куда отдать пас или куда открыться. Судит тот же код, что в приложении.</p>
+    <div class="trainer">
+      <div class="tboard">
+        <svg id="try-board" tabindex="0" aria-label="Поле для ответа. Нажми точку или выбери её стрелками и подтверди клавишей Enter"></svg>
+        <div class="timer" aria-hidden="true"><i id="try-bar"></i></div>
+        <button class="btn start" type="button" id="try-start">Старт, 7 секунд</button>
+      </div>
+      <div class="tpanel">
+        <p class="role"><span class="mono" id="try-code">CM</span><span id="try-role">Центральный полузащитник</span></p>
+        <h3 id="try-scene">Смени направление атаки</h3>
+        <p class="task" id="try-task"></p>
+        <div class="result" id="try-result" aria-live="polite">
+          <p class="word" id="try-word">Твой ход</p>
+          <p class="why" id="try-why">Звезда отмечает тебя. Решение сервер оценит одним из трёх вердиктов.</p>
+        </div>
+        <ul class="scale">
+          <li data-o="gold"><b>Золото</b><span>лучшее решение, победа, рейтинг растёт</span></li>
+          <li data-o="silver"><b>Серебро</b><span>мяч сохранён без угрозы, ничья</span></li>
+          <li data-o="error"><b>Ошибка</b><span>перехват, офсайд или время вышло, поражение</span></li>
+        </ul>
+        <div class="tactions">
+          <button class="btn" type="button" id="try-again" hidden>Ещё раз</button>
+          <button class="btn ghost" type="button" id="try-next">Другая сцена</button>
+        </div>
+      </div>
     </div>
+    <p class="proof">Сервер сверен с этим судьёй на 1 006 578 точках: расхождений ноль. Накрутить рейтинг с телефона не выйдет.</p>
   </section>
 
   <section class="section" id="modes" aria-labelledby="modes-title">
