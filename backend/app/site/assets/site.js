@@ -329,6 +329,32 @@ const tUi = (id) => document.getElementById(`try-${id}`);
 const TRY_ORDER = ["cm", "st", "cb", "winger", "dm", "am", "wm", "fb", "ss", "gk"];
 let tIdx = 0, tState = "idle", tSc, tDeadline, tTick, tAim, tAimMark, tLayer;
 
+// Frozen frame of a scene, fitted to the svg's own aspect. Returns the layer under the pieces for overlays.
+function drawFrozen(svg, sc, pad = 9) {
+  const pts = [...sc.mates.map((m) => m.at), ...sc.opps.map((o) => o.at), ...sc.gold];
+  const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+  const [x0, x1, y0, y1] = [Math.min(...xs) - pad, Math.max(...xs) + pad, Math.min(...ys) - pad, Math.max(...ys) + pad];
+  const A = svg.clientWidth / svg.clientHeight || 4 / 3;
+  const w = Math.max(x1 - x0, (y1 - y0) * A), h = w / A;
+  svg.setAttribute("viewBox", `${(x0 + x1 - w) / 2} ${(y0 + y1 - h) / 2} ${w} ${h}`);
+  svg.replaceChildren();
+  const defs = el("defs", {}, svg);
+  for (const [id, fill] of [["head", "#fff"], ["head-live", "#30d158"]]) {
+    const m = el("marker", { id: `${svg.id}-${id}`, viewBox: "0 0 10 10", refX: 6, refY: 5, markerWidth: 4, markerHeight: 4, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0 0L10 5L0 10z", fill }, m);
+  }
+  drawPitch(svg);
+  const layer = el("g", {}, svg);
+  const put = (g, q) => g.setAttribute("transform", `translate(${q[0]} ${q[1]})`);
+  sc.opps.forEach((o) => put(disc(o.n, "#e5483d", "#fff", false, svg), o.at));
+  sc.mates.forEach((mt, i) => { if (i !== sc.me) put(disc(mt.n, "#eef3f0", "#060a08", false, svg), mt.at); });
+  const me = sc.mates[sc.me].at;
+  put(disc(sc.mates[sc.me].n, "#00855c", "#fff", true, svg), me);
+  el("path", { d: "M0-1 .29-.4.95-.31.48.15.59.81 0 .5-.59.81-.48.15-.95-.31-.29-.4Z", fill: "#ffd60a", stroke: "#060a08", "stroke-width": 0.08, transform: `translate(${me[0]} ${me[1] - 4.1}) scale(1.9)` }, svg);
+  el("circle", { cx: sc.ball[0], cy: sc.ball[1], r: 0.85, fill: "#fff", stroke: "#060a08", "stroke-width": 0.2 }, svg);
+  return layer;
+}
+
 function tLoad(id) {
   cancelAnimationFrame(tTick);
   tSc = freezeScene(id);
@@ -337,25 +363,8 @@ function tLoad(id) {
   tUi("role").textContent = role.title;
   tUi("scene").textContent = role.scene;
   tUi("task").textContent = tSc.isPass ? "Мяч у тебя. Нажми, куда отдать пас." : "Мяч у партнёра. Нажми, куда открыться под пас.";
-  const pts = [...tSc.mates.map((m) => m.at), ...tSc.opps.map((o) => o.at), ...tSc.gold];
-  const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
-  const [x0, x1, y0, y1] = [Math.min(...xs) - 9, Math.max(...xs) + 9, Math.min(...ys) - 9, Math.max(...ys) + 9];
-  const A = tb.clientWidth / tb.clientHeight || 4 / 3; // 4:3 on desktop, 4:5 on phones (site.css)
-  const w = Math.max(x1 - x0, (y1 - y0) * A), h = w / A;
-  tb.setAttribute("viewBox", `${(x0 + x1 - w) / 2} ${(y0 + y1 - h) / 2} ${w} ${h}`);
-  tb.replaceChildren();
-  const defs = el("defs", {}, tb);
-  const m = el("marker", { id: "thead", viewBox: "0 0 10 10", refX: 6, refY: 5, markerWidth: 4, markerHeight: 4, orient: "auto-start-reverse" }, defs);
-  el("path", { d: "M0 0L10 5L0 10z", fill: "#fff" }, m);
-  drawPitch(tb);
-  tLayer = el("g", {}, tb);
-  const put = (g, q) => g.setAttribute("transform", `translate(${q[0]} ${q[1]})`);
-  tSc.opps.forEach((o) => put(disc(o.n, "#e5483d", "#fff", false, tb), o.at));
-  tSc.mates.forEach((mt, i) => { if (i !== tSc.me) put(disc(mt.n, "#eef3f0", "#060a08", false, tb), mt.at); });
+  tLayer = drawFrozen(tb, tSc);
   const me = tSc.mates[tSc.me].at;
-  put(disc(tSc.mates[tSc.me].n, "#00855c", "#fff", true, tb), me);
-  el("path", { d: "M0-1 .29-.4.95-.31.48.15.59.81 0 .5-.59.81-.48.15-.95-.31-.29-.4Z", fill: "#ffd60a", stroke: "#060a08", "stroke-width": 0.08, transform: `translate(${me[0]} ${me[1] - 4.1}) scale(1.9)` }, tb);
-  el("circle", { cx: tSc.ball[0], cy: tSc.ball[1], r: 0.85, fill: "#fff", stroke: "#060a08", "stroke-width": 0.2 }, tb);
   tAim = tSc.isPass ? [...tSc.ball] : [...me];
   tAimMark = el("circle", { r: 1.2, fill: "none", stroke: "#fff", "stroke-width": 0.35, "stroke-dasharray": "0.6 0.4", opacity: 0 }, tb);
   tState = "idle";
@@ -412,9 +421,9 @@ function tFinish(t) {
   }
   if (t) {
     const me = tSc.mates[tSc.me].at;
-    if (!tSc.isPass) el("line", { x1: me[0], y1: me[1], x2: t[0], y2: t[1], stroke: "#30d158", "stroke-width": 0.45, "stroke-dasharray": "1.2 0.8", "marker-end": "url(#thead)" }, g);
+    if (!tSc.isPass) el("line", { x1: me[0], y1: me[1], x2: t[0], y2: t[1], stroke: "#30d158", "stroke-width": 0.45, "stroke-dasharray": "1.2 0.8", "marker-end": "url(#try-board-head-live)" }, g);
     const end = v.end || t;
-    el("line", { x1: tSc.ball[0], y1: tSc.ball[1], x2: end[0], y2: end[1], stroke: "#fff", "stroke-width": 0.4, "marker-end": "url(#thead)" }, g);
+    el("line", { x1: tSc.ball[0], y1: tSc.ball[1], x2: end[0], y2: end[1], stroke: "#fff", "stroke-width": 0.4, "marker-end": "url(#try-board-head)" }, g);
     el("path", { d: `M${t[0] - 1} ${t[1] - 1}l2 2m0-2l-2 2`, stroke: "#fff", "stroke-width": 0.4 }, g);
   }
   tResult(v);
@@ -447,3 +456,33 @@ tUi("start").addEventListener("click", tStart);
 tUi("again").addEventListener("click", () => { tLoad(TRY_ORDER[tIdx]); tStart(); });
 tUi("next").addEventListener("click", () => { tIdx = (tIdx + 1) % TRY_ORDER.length; tLoad(TRY_ORDER[tIdx]); });
 tLoad(TRY_ORDER[0]);
+
+// --- Modes: live previews of each mode's mechanic ---
+
+{
+  const svg = document.getElementById("mode-board");
+  const sc = freezeScene("am");
+  const layer = drawFrozen(svg, sc, 7);
+  const gold = sc.gold, me = sc.mates[sc.me].at;
+  const target = [gold.reduce((s, q) => s + q[0], 0) / gold.length, gold.reduce((s, q) => s + q[1], 0) / gold.length];
+  el("polygon", { points: gold.map((q) => q.join(",")).join(" "), fill: "rgb(255 214 10 / 0.22)", stroke: "#ffd60a", "stroke-width": 0.3, "stroke-dasharray": "1 0.6" }, layer);
+  el("line", { x1: me[0], y1: me[1], x2: target[0], y2: target[1], stroke: "#30d158", "stroke-width": 0.5, "stroke-dasharray": "1.2 0.8", "marker-end": "url(#mode-board-head-live)" }, layer);
+
+  const ring = document.querySelector(".countdown");
+  const digit = ring.querySelector(".mono");
+  const clock = document.getElementById("rush-clock");
+  const steps = document.querySelectorAll(".steps i");
+  let left = 8, rush = 181; // first tick shows 7 and 3:00
+  const tick = () => {
+    left = left === 0 ? 7 : left - 1;
+    ring.classList.toggle("reset", left === 7);
+    ring.style.setProperty("--gone", String(1 - left / 7));
+    digit.textContent = left;
+    rush = rush === 0 ? 180 : rush - 1;
+    clock.textContent = `${Math.floor(rush / 60)}:${String(rush % 60).padStart(2, "0")}`;
+    const solved = Math.min(5, Math.floor((180 - rush) / 30) + 1);
+    steps.forEach((s, i) => s.classList.toggle("on", i < solved));
+  };
+  if (reduce) { ring.style.setProperty("--gone", "0.43"); digit.textContent = "4"; clock.textContent = "2:41"; steps.forEach((s, i) => s.classList.toggle("on", i < 2)); }
+  else { tick(); setInterval(tick, 1000); }
+}

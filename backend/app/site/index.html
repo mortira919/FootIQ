@@ -114,22 +114,44 @@
 
   <section class="section" id="modes" aria-labelledby="modes-title">
     <h2 id="modes-title">Три режима тренировки</h2>
-    <div class="fixtures">
-      <div class="fixture">
-        <span class="meta mono">7 сек · 2D</span>
-        <div><h3>Тактический полигон</h3><p>Розыгрыш замирает, у тебя семь секунд на пас или открывание.</p></div>
-        <p class="limit"><span class="mono">Без лимита</span>бесплатно</p>
-      </div>
-      <div class="fixture">
-        <span class="meta mono">3 мин · 3 жизни</span>
-        <div><h3>Tactical Rush</h3><p>Спринт на три минуты. Сцены идут подряд, сложность растёт с каждой решённой.</p></div>
-        <p class="limit"><span class="mono">2 в день</span>бесплатно</p>
-      </div>
-      <div class="fixture">
-        <span class="meta mono">Видео</span>
-        <div><h3>Разбор в раздевалке</h3><p>Эпизод матча: выбери вариант и объясни выбор своими словами. Тренер оценит ответ по десятибалльной шкале.</p></div>
-        <p class="limit"><span class="mono">1 в день</span>бесплатно</p>
-      </div>
+    <div class="modes">
+      <article class="mode polygon">
+        <div class="mode-art">
+          <svg id="mode-board" aria-hidden="true"></svg>
+          <div class="countdown" aria-hidden="true">
+            <svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="19"/><circle class="run" cx="22" cy="22" r="19" pathLength="1"/></svg>
+            <span class="mono">7</span>
+          </div>
+        </div>
+        <div class="mode-copy">
+          <div><h3>Тактический полигон</h3><p>Розыгрыш замирает, у тебя семь секунд. Покажи пас или открывание, и сервер сразу вынесет вердикт.</p></div>
+          <span class="tag">Без лимита</span>
+        </div>
+      </article>
+
+      <article class="mode rush">
+        <div class="mode-art rush-art" aria-hidden="true">
+          <span class="clock mono" id="rush-clock">3:00</span>
+          <div class="lives"><i></i><i></i><i class="lost"></i></div>
+          <div class="steps"><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="mode-copy">
+          <div><h3>Tactical Rush</h3><p>Три минуты, три жизни. Сцены идут подряд, и каждая следующая сложнее.</p></div>
+          <span class="tag">2 в день бесплатно</span>
+        </div>
+      </article>
+
+      <article class="mode locker">
+        <div class="mode-art locker-art" aria-hidden="true">
+          <div class="options"><span>A</span><span class="picked">B</span><span>C</span></div>
+          <p class="answer">«Опорного держат, отдаю на ход правому центральному»</p>
+          <p class="score"><span class="mono">8</span>/10</p>
+        </div>
+        <div class="mode-copy">
+          <div><h3>Разбор в раздевалке</h3><p>Эпизод матча: выбери вариант и объясни выбор своими словами. Тренер поставит оценку из десяти.</p></div>
+          <span class="tag">1 в день бесплатно</span>
+        </div>
+      </article>
     </div>
   </section>
 
