@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 import hashlib
 import time as clock
 
-from app import apple, llm, notify
+from app import apple, llm, notify, revenuecat
 from app.accounts import erase_account
 from app.elo import score_for
 from app.geometry import judge
@@ -38,6 +38,9 @@ from app.store import (
     log_llm,
     set_ai_consent,
     shared_grade,
+    find_rc_user,
+    process_rc_event,
+    set_subscription,
     store_grade,
     remove_block,
     _zone,
@@ -473,9 +476,20 @@ def my_attempts(limit: int = 30, before: str | None = None, row=Depends(player))
     return {"items": items, "nextBefore": items[-1]["at"] if len(items) == limit else None}
 
 
+def sync_from_revenuecat(user_id: str) -> bool:
+    """Сверяет PRO с REST API RevenueCat. False, если RevenueCat не настроен или не ответил: тогда статус не трогаем."""
+    subscriber = revenuecat.get_subscriber(user_id)
+    if subscriber is None:
+        return False
+    set_subscription(user_id, revenuecat.pro_until(subscriber))
+    return True
+
+
 @router.post("/me/sync-subscription")
 def sync_subscription(row=Depends(player)) -> dict:
-    # ponytail: RevenueCat ещё не подключён, PRO включается флагом в базе; спросить RevenueCat API, когда появится ключ
+    # Клиент зовёт после покупки и «Восстановить покупки», не дожидаясь вебхука.
+    if sync_from_revenuecat(row["id"]):
+        row = user_row(row["id"])
     return me_payload(row)
 
 
@@ -980,3 +994,98 @@ def block(body: BlockIn, row=Depends(player)) -> Response:
 def unblock(user_id: str, row=Depends(player)) -> Response:
     remove_block(row["id"], user_id)
     return Response(status_code=204)
+
+
+# --- вебхук RevenueCat ---
+
+# Названия событий по https://www.revenuecat.com/docs/integrations/webhooks/event-types-and-fields
+RC_GRANT = {
+    "INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "NON_RENEWING_PURCHASE", "PRODUCT_CHANGE",
+    "SUBSCRIPTION_EXTENDED", "TEMPORARY_ENTITLEMENT_GRANT", "REFUND_REVERSED",
+}
+RC_REFUND_REASON = "CUSTOMER_SUPPORT"  # CANCELLATION с этой причиной означает возврат денег
+
+
+def _rc_date(ms) -> str | None:
+    if ms is None:
+        return None
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).date().isoformat()
+
+
+def _rc_authorized(header: str | None) -> bool:
+    secret = os.environ.get("REVENUECAT_WEBHOOK_SECRET")
+    if not secret or not header:
+        return False
+    given = header.strip()
+    return any(secrets.compare_digest(given.encode(), value.encode()) for value in (secret, f"Bearer {secret}"))
+
+
+def _rc_effect(event: dict) -> tuple[str, str | None]:
+    """Что событие делает с PRO: ("grant", дата) | ("revoke", None) | ("keep", дата) | ("ignore", None)."""
+    kind = event.get("type")
+    ids = event.get("entitlement_ids")
+    if ids is not None and revenuecat.entitlement() not in ids and kind not in ("EXPIRATION", "CANCELLATION", "TRANSFER"):
+        return "ignore", None
+    expires = event.get("expiration_at_ms")
+    if kind in RC_GRANT:
+        return "grant", _rc_date(expires) if expires is not None else revenuecat.LIFETIME
+    if kind == "CANCELLATION":
+        # Обычная отмена: доступ до конца оплаченного периода. Возврат денег снимает PRO сразу.
+        if event.get("cancel_reason") == RC_REFUND_REASON:
+            return "revoke", None
+        return "keep", _rc_date(expires)
+    if kind == "EXPIRATION":
+        return "revoke", None
+    if kind == "BILLING_ISSUE":
+        # Во время grace period стор ещё пытается списать деньги, доступ сохраняется. Без grace ждём EXPIRATION.
+        grace = event.get("grace_period_expiration_at_ms")
+        return ("keep", _rc_date(grace)) if grace else ("ignore", None)
+    return "ignore", None  # TEST, SUBSCRIPTION_PAUSED (пауза с конца периода, потом придёт EXPIRATION) и прочие
+
+
+@router.post("/webhooks/revenuecat")
+async def revenuecat_webhook(request: Request, authorization: str | None = Header(default=None)) -> dict:
+    if not _rc_authorized(authorization):
+        raise fail(401, "unauthorized", "Неверный секрет вебхука")
+    try:
+        payload = await request.json()
+        event = payload["event"]
+        event_id, kind = str(event["id"]), str(event["type"])
+    except (ValueError, KeyError, TypeError):
+        raise invalid("Ожидается {api_version, event: {id, type, ...}}")
+
+    if kind == "TRANSFER":
+        moved_to = [str(item) for item in event.get("transferred_to") or []]
+        moved_from = [str(item) for item in event.get("transferred_from") or []]
+        target, source = find_rc_user(moved_to), find_rc_user(moved_from)
+
+        def apply(connection):
+            # Покупка переехала: у прежнего владельца PRO снимаем, новому переносим срок прежнего.
+            if source:
+                previous = connection.execute("SELECT pro_until, subscription_tier FROM users WHERE id = ?", (source,)).fetchone()
+                set_subscription(source, None, connection)
+                if target and previous["subscription_tier"] == "pro":
+                    set_subscription(target, previous["pro_until"], connection)
+
+        fresh = process_rc_event(event_id, kind, ",".join(moved_to), target, apply)
+        affected = [user for user in (source, target) if user]
+    else:
+        candidates = [event.get("app_user_id"), event.get("original_app_user_id"), *(event.get("aliases") or [])]
+        user_id = find_rc_user([str(item) for item in candidates if item])
+        effect, until = _rc_effect(event)
+
+        def apply(connection):
+            if user_id is None or effect == "ignore":
+                return
+            if effect == "revoke":
+                set_subscription(user_id, None, connection)
+            elif effect == "grant" or (effect == "keep" and until):
+                set_subscription(user_id, until, connection)
+
+        fresh = process_rc_event(event_id, kind, event.get("app_user_id"), user_id, apply)
+        affected = [user_id] if user_id else []
+    if fresh:
+        # RevenueCat советует после вебхука сверяться через GET /subscribers: тогда статус всегда в одном формате.
+        for user in affected:
+            sync_from_revenuecat(user)
+    return {"ok": True, "duplicate": not fresh}

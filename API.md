@@ -326,12 +326,48 @@
 
 Покупку и восстановление будет делать RevenueCat SDK на клиенте, эндпоинтов покупки на сервере не нужно. Серверу нужно знать, есть ли у игрока PRO, чтобы применять лимиты.
 
-- **Webhook:** `POST /v1/webhooks/revenuecat` принимает события покупки, продления, отмены и истечения и обновляет `isPro`. В RevenueCat клиент будет логиниться с `appUserId` = `Me.id`.
-- **`POST /v1/me/sync-subscription`** → `Me`: сервер сам спрашивает RevenueCat. Клиент вызывает его после покупки и на «Восстановить покупки», не дожидаясь webhook.
-- **Что даёт PRO:** безлимитные Rush и Видео, тренеры Пеп, Жозе и Юрген, смену роли без 30-дневного ожидания.
-- **Когда PRO истёк:** роль сохраняется, тренер возвращается к `base`, снова действуют лимиты Free.
+| Метод и путь | Кто шлёт | Что отдаёт сервер |
+| --- | --- | --- |
+| `POST /v1/webhooks/revenuecat` | RevenueCat, с заголовком `Authorization` из дашборда | `200 {"ok": true, "duplicate": false}`; повтор события `200 {"ok": true, "duplicate": true}`; неверный или пустой секрет 401 `unauthorized` |
+| `POST /v1/me/sync-subscription` | Клиент после покупки и на «Восстановить покупки» | `Me` со свежим `isPro` |
 
-**Статус на клиенте:** RevenueCat SDK ещё не подключён. Кнопки «Оформить» и «Восстановить» работают на моке магазина и затем вызывают `sync-subscription`. Пока SDK нет, PRO на стенде включается вручную флагом `isPro` в базе.
+Тело вебхука (формат RevenueCat):
+
+```json
+{
+  "api_version": "1.0",
+  "event": {
+    "id": "CD489E0E-5D02-4C4E-A6A9-3D4A4C5F2A1B",
+    "type": "RENEWAL",
+    "app_user_id": "u_8f2k",
+    "original_app_user_id": "u_8f2k",
+    "aliases": ["u_8f2k"],
+    "entitlement_ids": ["pro"],
+    "expiration_at_ms": 1791100000000,
+    "environment": "PRODUCTION"
+  }
+}
+```
+
+- **Секрет:** значение заголовка `Authorization` задаётся в дашборде RevenueCat и на сервере в `REVENUECAT_WEBHOOK_SECRET`. Принимается и `Bearer <секрет>`, и сам секрет.
+- **Идемпотентность:** обработанные `event.id` хранятся. RevenueCat при ошибке повторяет событие с тем же `id` до 5 раз, повтор состояние не меняет.
+- **Игрок:** `app_user_id` = `Me.id` (клиент логинится в RevenueCat SDK с этим id). Ищем по `app_user_id`, `original_app_user_id` и `aliases`. Незнакомого игрока событие не трогает, ответ всё равно 200.
+- **Как события меняют `isPro`** (названия по документации RevenueCat, Event Types and Fields):
+
+| Событие | Что делает сервер |
+| --- | --- |
+| `INITIAL_PURCHASE`, `RENEWAL`, `UNCANCELLATION`, `PRODUCT_CHANGE`, `SUBSCRIPTION_EXTENDED`, `TEMPORARY_ENTITLEMENT_GRANT`, `REFUND_REVERSED`, `NON_RENEWING_PURCHASE` | PRO до `expiration_at_ms`; без даты бессрочно |
+| `CANCELLATION` | Отмена продления: PRO остаётся до конца оплаченного периода (`expiration_at_ms`). С `cancel_reason = CUSTOMER_SUPPORT` это возврат денег: PRO снимается сразу |
+| `EXPIRATION` | PRO снимается |
+| `BILLING_ISSUE` | С `grace_period_expiration_at_ms` доступ сохраняется до конца grace period; без него ничего не меняется до `EXPIRATION` |
+| `TRANSFER` | Покупка переехала на другой аккаунт: у `transferred_from` PRO снимается, `transferred_to` получает его срок |
+| `SUBSCRIPTION_PAUSED`, `TEST`, `INVOICE_ISSUANCE` и прочие | Ничего не меняют |
+
+- **Сверка с REST API:** после каждого нового события и в `sync-subscription` сервер спрашивает `GET https://api.revenuecat.com/v1/subscribers/{Me.id}` (секретный ключ `REVENUECAT_SECRET_KEY`, так советует RevenueCat). PRO активен, если entitlement `pro` (имя в `REVENUECAT_ENTITLEMENT`) не истёк или идёт grace period (`grace_period_expires_date`). Если RevenueCat не ответил, статус не меняется.
+- **Что даёт PRO:** безлимитные Rush и Видео, тренеры Пеп, Жозе и Юрген, смену роли без 30-дневного ожидания.
+- **Когда PRO истёк или деньги вернули:** роль сохраняется, тренер возвращается к `base`, снова действуют лимиты Free.
+
+**Статус на клиенте:** RevenueCat SDK ещё не подключён. Кнопки «Оформить» и «Восстановить» работают на моке магазина и затем вызывают `sync-subscription`. Пока SDK и ключей RevenueCat нет, PRO на стенде включается вручную полями `subscription_tier` и `pro_until` в базе.
 
 ## Модели данных
 

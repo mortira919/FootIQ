@@ -218,6 +218,18 @@ def init_db() -> None:
         _add_column(connection, "reports", "snapshot", "TEXT")
         _add_column(connection, "users", "banned_at", "TEXT")
         _add_column(connection, "users", "ban_reason", "TEXT")
+        # Обработанные события RevenueCat: повтор с тем же id ничего не меняет.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rc_events (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                app_user_id TEXT,
+                user_id TEXT,
+                received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         # Согласие на передачу ответа во внешнюю LLM (Apple 5.1.2(i)): время согласия или NULL.
         _add_column(connection, "users", "ai_consent_at", "TEXT")
 
@@ -979,3 +991,38 @@ def log_llm(user_id: str, attempt_id: str | None, provider: str, status: str, du
             "INSERT INTO llm_log (user_id, attempt_id, provider, status, duration_ms) VALUES (?, ?, ?, ?, ?)",
             (user_id, attempt_id, provider, status, duration_ms),
         )
+
+
+# --- подписка PRO (RevenueCat) ---
+
+
+def set_subscription(user_id: str, until: str | None, connection=None) -> None:
+    """until: дата ISO, до которой действует PRO, или None, чтобы снять PRO сейчас."""
+    tier, value = ("pro", until) if until else ("free", None)
+    if connection is None:
+        with connect() as own:
+            own.execute("UPDATE users SET subscription_tier = ?, pro_until = ? WHERE id = ?", (tier, value, user_id))
+    else:
+        connection.execute("UPDATE users SET subscription_tier = ?, pro_until = ? WHERE id = ?", (tier, value, user_id))
+
+
+def find_rc_user(candidates: list[str]) -> str | None:
+    with connect() as connection:
+        for candidate in candidates:
+            row = connection.execute("SELECT id FROM users WHERE id = ? AND provider IS NOT NULL", (candidate,)).fetchone()
+            if row:
+                return row["id"]
+    return None
+
+
+def process_rc_event(event_id: str, event_type: str, app_user_id: str | None, user_id: str | None, apply) -> bool:
+    """Записывает событие и применяет его в одной транзакции. False, если событие с этим id уже было."""
+    with locked() as connection:
+        known = connection.execute("SELECT 1 FROM rc_events WHERE id = ?", (event_id,)).fetchone()
+        if known:
+            return False
+        connection.execute(
+            "INSERT INTO rc_events (id, type, app_user_id, user_id) VALUES (?, ?, ?, ?)", (event_id, event_type, app_user_id, user_id)
+        )
+        apply(connection)
+        return True

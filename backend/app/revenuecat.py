@@ -11,6 +11,7 @@ app_user_id в RevenueCat = Me.id: клиент логинится в SDK с э�
 
 import logging
 import os
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 import httpx
@@ -59,3 +60,29 @@ def get_subscriber(app_user_id: str) -> dict | None:
     except (httpx.HTTPError, ValueError):
         log.exception("RevenueCat: не удалось получить подписчика %s", app_user_id)
         return None
+
+
+LIFETIME = "9999-12-31"  # бессрочная покупка: expires_date = null
+
+
+def entitlement() -> str:
+    return os.environ.get("REVENUECAT_ENTITLEMENT", "pro")
+
+
+def pro_until(subscriber: dict) -> str | None:
+    """Дата (ISO, UTC), до которой действует PRO по ответу GET /subscribers, или None, если PRO нет.
+
+    expires_date = null у бессрочной покупки. Во время grace period после проблемы с оплатой доступ сохраняется
+    до grace_period_expires_date.
+    """
+    info = ((subscriber.get("subscriber") or {}).get("entitlements") or {}).get(entitlement())
+    if not info:
+        return None
+    if info.get("expires_date") is None:
+        return LIFETIME
+    now = datetime.now(timezone.utc)
+    ends = [info.get("expires_date"), info.get("grace_period_expires_date")]
+    moments = [datetime.fromisoformat(value.replace("Z", "+00:00")) for value in ends if value]
+    latest = max(moments)
+    return latest.date().isoformat() if latest > now else None
+
