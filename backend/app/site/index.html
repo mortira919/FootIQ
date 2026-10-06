@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amplua · тактический тренажёр для футболистов</title>
+<meta name="description" content="Выбери амплуа, реши тактическую сцену на поле и получи рейтинг. Десять позиций, три режима, проверка каждого хода на сервере.">
+<meta name="theme-color" content="#060a08">
+<meta property="og:title" content="Amplua">
+<meta property="og:description" content="Тактические задачи для десяти амплуа. Рейтинг как в шахматах.">
+<link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/fonts/Inter-Bold.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">К содержанию</a>
+<header class="top">
+  <a class="brand" href="/"><img src="/assets/mark.svg" alt="" width="32" height="32">Amplua</a>
+  <nav aria-label="Разделы">
+    <a href="#modes">Режимы</a>
+    <a href="#rating">Рейтинг</a>
+    <a href="#pro">PRO</a>
+    <a class="btn small" href="#get">Скачать</a>
+  </nav>
+</header>
+
+<main id="main">
+  <section class="sheet order-mobile" aria-labelledby="hero-title">
+    <div class="copy-col">
+      <div class="head">
+        <h1 id="hero-title">Выбери позицию.<br>Реши розыгрыш.</h1>
+        <p class="lead">Тактические задачи для десяти амплуа. Сервер проверяет каждый ход и ведёт твой рейтинг, как в шахматах.</p>
+        <div class="stores">
+          <a class="store" href="https://play.google.com/store/apps/details?id=com.footiq.footiq"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z"/></svg><span><small>Скачать в</small>Google Play</span></a>
+          <span class="store soon" aria-disabled="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg><span><small>Скоро в</small>App Store</span></span>
+        </div>
+      </div>
+
+      <article class="scene" id="scene" aria-live="polite">
+        <div class="scene-swap">
+          <p class="role"><span class="mono" data-f="code">DM</span><span data-f="title">Опорный полузащитник</span></p>
+          <h2 data-f="scene">Выйди из тени опеки</h2>
+        </div>
+        <div class="clip">
+          <svg id="board" role="img" aria-label="Схема сцены: ты отмечен звездой, пунктир показывает решение"></svg>
+          <span class="phase" id="phase" aria-hidden="true"></span>
+        </div>
+        <p class="legend" aria-hidden="true">
+          <span><svg viewBox="-1.2 -1.2 2.4 2.4"><path d="M0-1 .29-.4.95-.31.48.15.59.81 0 .5-.59.81-.48.15-.95-.31-.29-.4Z" fill="#ffd60a"/></svg>Ты</span>
+          <span><i class="dot mate"></i>Партнёры</span>
+          <span><i class="dot opp"></i>Соперники</span>
+          <span><i class="zone"></i>Лучшее решение</span>
+        </p>
+        <div class="scene-swap">
+          <p class="lesson" data-f="lesson">Пока ты за спиной прессингующего, линия «мяч и ты» перекрыта. Шаг в сторону от этой линии открывает передачу вперёд.</p>
+          <p class="skills" data-f="skills">Тренирует: контроль зоны 14, перекрытие линий передач корпусом, баланс в переходе.</p>
+        </div>
+      </article>
+    </div>
+
+    <div class="pitch-col">
+      <p class="pitch-cap"><span>Нажми на свою позицию</span><span>Ворота соперника</span></p>
+      <div class="pitch" role="group" aria-label="Амплуа на поле. Выбери своё">
+        <svg viewBox="0 0 68 105" preserveAspectRatio="none" aria-hidden="true" fill="none" stroke="rgb(240 248 243 / 0.5)" stroke-width="1.5" vector-effect="non-scaling-stroke">
+          <g vector-effect="non-scaling-stroke">
+            <rect x="2" y="2" width="64" height="101" vector-effect="non-scaling-stroke"/>
+            <line x1="2" y1="52.5" x2="66" y2="52.5" vector-effect="non-scaling-stroke"/>
+            <circle cx="34" cy="52.5" r="9.15" vector-effect="non-scaling-stroke"/>
+            <rect x="13.84" y="2" width="40.32" height="16.5" vector-effect="non-scaling-stroke"/>
+            <rect x="24.84" y="2" width="18.32" height="5.5" vector-effect="non-scaling-stroke"/>
+            <path d="M26.7 18.5a9.15 9.15 0 0 0 14.6 0" vector-effect="non-scaling-stroke"/>
+            <rect x="13.84" y="86.5" width="40.32" height="16.5" vector-effect="non-scaling-stroke"/>
+            <rect x="24.84" y="97.5" width="18.32" height="5.5" vector-effect="non-scaling-stroke"/>
+            <path d="M26.7 86.5a9.15 9.15 0 0 1 14.6 0" vector-effect="non-scaling-stroke"/>
+          </g>
+        </svg>
+        <!-- markers are rendered by site.js from ROLES -->
+        <noscript><p class="pitch-cap">Включи JavaScript, чтобы выбрать позицию</p></noscript>
+      </div>
+      <p class="pitch-cap bottom"><span></span><span>Твои ворота</span></p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="judge-title">
+    <h2 id="judge-title">Ход проверяет сервер</h2>
+    <p class="intro">Приложение рисует поле, а исход считает сервер по той же геометрии: конус отбора, линии передач, офсайд. Мы сверили их на миллионе точек, расхождений нет. Накрутить рейтинг с телефона не выйдет.</p>
+    <div class="verdicts">
+      <div class="verdict gold"><span class="word">Золото</span><p><b>Лучшее решение в сцене.</b> Сцена засчитана как победа, рейтинг растёт.</p></div>
+      <div class="verdict silver"><span class="word">Серебро</span><p><b>Рабочий вариант, но был сильнее.</b> Засчитывается как ничья, рейтинг почти не двигается.</p></div>
+      <div class="verdict error"><span class="word">Ошибка</span><p><b>Пас перехватят или ты в офсайде.</b> Это поражение, рейтинг падает.</p></div>
+    </div>
+  </section>
+
+  <section class="section" id="modes" aria-labelledby="modes-title">
+    <h2 id="modes-title">Три режима тренировки</h2>
+    <div class="fixtures">
+      <div class="fixture">
+        <span class="meta mono">7 сек · 2D</span>
+        <div><h3>Тактический полигон</h3><p>Розыгрыш замирает, у тебя семь секунд на пас или открывание.</p></div>
+        <p class="limit"><span class="mono">Без лимита</span>бесплатно</p>
+      </div>
+      <div class="fixture">
+        <span class="meta mono">3 мин · 3 жизни</span>
+        <div><h3>Tactical Rush</h3><p>Спринт на три минуты. Сцены идут подряд, сложность растёт с каждой решённой.</p></div>
+        <p class="limit"><span class="mono">2 в день</span>бесплатно</p>
+      </div>
+      <div class="fixture">
+        <span class="meta mono">Видео</span>
+        <div><h3>Разбор в раздевалке</h3><p>Эпизод матча: выбери вариант и объясни выбор своими словами. Тренер оценит ответ по десятибалльной шкале.</p></div>
+        <p class="limit"><span class="mono">1 в день</span>бесплатно</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="rating" aria-labelledby="rating-title">
+    <h2 id="rating-title">Рейтинг как в шахматах</h2>
+    <p class="intro">Каждое амплуа считается отдельно, плюс общий рейтинг по всем позициям. Новый игрок начинает с 800.</p>
+    <div class="ladder-wrap">
+      <ol class="ladder" reversed aria-label="Звания по общему рейтингу">
+        <li class="step top" style="--w:100%"><span>UEFA Pro</span><span class="mono">1800+</span></li>
+        <li class="step" style="--w:88%"><span>Элита</span><span class="mono">1600</span></li>
+        <li class="step" style="--w:76%"><span>Профи</span><span class="mono">1400</span></li>
+        <li class="step" style="--w:64%"><span>Полупрофи</span><span class="mono">1200</span></li>
+        <li class="step" style="--w:52%"><span>Любитель</span><span class="mono">1000</span></li>
+        <li class="step you" style="--w:40%"><span>Новичок, ты здесь</span><span class="mono">800</span></li>
+      </ol>
+      <div>
+        <div class="side">
+          <h3>Таблицы</h3>
+          <p>Общая таблица, таблица твоего региона и отдельная по каждому амплуа.</p>
+        </div>
+        <div class="side">
+          <h3>Лиги для своих</h3>
+          <p>Создай лигу, отправь друзьям код и следите за своей таблицей. Вступить можно в разделе «Рейтинг».</p>
+          <span class="code" aria-label="Пример кода лиги">K7QM4P</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="pro" aria-labelledby="pro-title">
+    <h2 id="pro-title">PRO снимает лимиты</h2>
+    <div class="pass">
+      <div>
+        <p class="tier">PRO</p>
+        <div class="prices">
+          <p class="price"><span class="mono">$4.99</span><span>в месяц</span></p>
+          <p class="price"><span class="mono">$29.99</span><span>в год</span></p>
+        </div>
+        <p class="fine">Подписка продлевается автоматически. Оплата и отмена через Google Play или App Store.</p>
+      </div>
+      <ul>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Rush и разборы без дневного лимита</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Три тренера со своим стилем разбора: Пеп, Жозе и Юрген</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Смена амплуа без 30 дней ожидания</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Отмена в любой момент в настройках магазина</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section close" id="get" aria-labelledby="close-title">
+    <div class="row">
+      <h2 id="close-title">Выходи на поле.</h2>
+      <div class="stores">
+          <a class="store" href="https://play.google.com/store/apps/details?id=com.footiq.footiq"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z"/></svg><span><small>Скачать в</small>Google Play</span></a>
+          <span class="store soon" aria-disabled="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg><span><small>Скоро в</small>App Store</span></span>
+        </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="inner">
+    <span>© 2026 Команда Amplua</span>
+    <nav aria-label="Документы">
+      <a href="/privacy">Политика конфиденциальности</a>
+      <a href="/terms">Условия использования</a>
+      <a href="/delete">Удаление аккаунта</a>
+      <a href="mailto:amplua.support@gmail.com">amplua.support@gmail.com</a>
+    </nav>
+  </div>
+</footer>
+<script src="/assets/site.js" defer></script>
+</body>
+</html>

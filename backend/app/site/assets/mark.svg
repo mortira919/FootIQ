@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Amplua">
+  <rect width="120" height="120" rx="28" fill="#0c6b49"/>
+  <rect x="22" y="16" width="76" height="88" rx="3" fill="none" stroke="#e7efe9" stroke-width="2"/>
+  <line x1="22" y1="60" x2="98" y2="60" stroke="#e7efe9" stroke-width="2"/>
+  <circle cx="60" cy="60" r="12" fill="none" stroke="#e7efe9" stroke-width="2"/>
+  <circle cx="60" cy="60" r="2.5" fill="#e7efe9"/>
+  <path d="M22 42h14v36H22" fill="none" stroke="#e7efe9" stroke-width="2"/>
+  <path d="M98 42H84v36h14" fill="none" stroke="#e7efe9" stroke-width="2"/>
+  <path d="M22 32h8v56h-8" fill="none" stroke="#d6a84a" stroke-width="2"/>
+</svg>

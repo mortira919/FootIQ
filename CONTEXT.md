@@ -10,7 +10,7 @@
 C:\Users\User\.fly\bin\flyctl.exe deploy --ha=false --remote-only -a footiq
 ```
 
-Локально стенд открывается на `http://127.0.0.1:8000` (команды в README). Тесты: 73 зелёных, `cd backend && PYTHONPATH=. .venv/bin/python -m unittest discover -s tests`.
+Локально стенд открывается на `http://127.0.0.1:8000/stand`, на `/` сайт (команды в README). Тесты: 73 зелёных, `cd backend && PYTHONPATH=. .venv/bin/python -m unittest discover -s tests`.
 
 ## Что сделано за 4–5 октября
 

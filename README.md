@@ -19,7 +19,7 @@ python3 -m venv .venv
 PYTHONPATH=. .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Открыть [http://127.0.0.1:8000](http://127.0.0.1:8000).
+Стенд: [http://127.0.0.1:8000/stand](http://127.0.0.1:8000/stand). На `/` лежит сайт: лендинг, `/privacy`, `/terms`, `/delete`, `/l/<код>`.
 
 На стенде вход по имени. То же имя возвращает того же игрока.
 

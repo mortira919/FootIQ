@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pathlib import Path
 from pydantic import BaseModel
@@ -43,6 +44,7 @@ from app.store import (
 )
 
 STATIC = Path(__file__).resolve().parent / "static"
+SITE = Path(__file__).resolve().parent / "site"
 PUZZLES = load_puzzles()
 VIDEOS = load_videos()
 app = FastAPI(title="FootIQ", version="0.2.0")
@@ -160,9 +162,39 @@ def _pack(puzzle: dict, mirrored: bool) -> dict:
     return payload
 
 
-@app.get("/")
+@app.get("/stand")
 def stand() -> FileResponse:
     return FileResponse(STATIC / "index.html")
+
+
+# --- сайт: лендинг и страницы, которые требуют сторы ---
+
+app.mount("/assets", StaticFiles(directory=SITE / "assets"), name="assets")
+
+
+@app.get("/")
+def landing() -> FileResponse:
+    return FileResponse(SITE / "index.html")
+
+
+@app.get("/privacy", include_in_schema=False)
+def privacy() -> FileResponse:
+    return FileResponse(SITE / "privacy.html")
+
+
+@app.get("/terms", include_in_schema=False)
+def terms() -> FileResponse:
+    return FileResponse(SITE / "terms.html")
+
+
+@app.get("/delete", include_in_schema=False)
+def delete_account() -> FileResponse:
+    return FileResponse(SITE / "delete.html")
+
+
+@app.get("/l/{code}", include_in_schema=False)
+def league_invite(code: str) -> FileResponse:
+    return FileResponse(SITE / "league.html")
 
 
 @app.get("/health")
