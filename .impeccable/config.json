@@ -17,6 +17,15 @@
         ],
         "createdAt": "2026-10-06T10:29:12.312Z",
         "reason": "pitch mowing stripes on the football pitch, the product's own subject (app pitch.dart)"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "backend/app/site/index.html"
+        ],
+        "createdAt": "2026-10-06T12:58:34.899Z",
+        "reason": "assistant triage: .tboard is a full-bleed interactive pitch SVG (trainer board), its only text is SVG shirt numbers inside the drawing; inset would break the board"
       }
     ]
   }

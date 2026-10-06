@@ -1088,3 +1088,8 @@ def bind_reviewer(provider: str, sub: str, email: str) -> bool:
             (sub, provider, email),
         )
         return cursor.rowcount == 1
+
+
+def mark_reviewer(user_id: str) -> None:
+    with connect() as connection:
+        connection.execute("UPDATE users SET review = 1 WHERE id = ?", (user_id,))

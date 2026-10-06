@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 import hashlib
 import time as clock
 
-from app import apple, llm, notify, revenuecat
+from app import apple, llm, notify, review_login, revenuecat
 from app.accounts import erase_account
 from app.elo import score_for
 from app.geometry import judge
@@ -37,6 +37,7 @@ from app.store import (
     bind_reviewer,
     cancel_session,
     log_llm,
+    mark_reviewer,
     set_ai_consent,
     shared_grade,
     find_rc_user,
@@ -391,6 +392,32 @@ def auth_apple(
         if token:
             row = update_user(row["id"], apple_refresh=token)
     return _session(access, refresh, row, x_timezone_offset)
+
+
+class ReviewIn(Body):
+    login: Short
+    password: Short
+
+
+def review_login_enabled() -> None:
+    # Выключенный вход неотличим от несуществующего пути: 404 раньше разбора тела запроса.
+    if not review_login.enabled():
+        raise fail(404, "not_found", "Not Found")
+
+
+@router.post("/auth/review", dependencies=[Depends(review_login_enabled)])
+def auth_review(
+    body: ReviewIn, request: Request, _: None = Depends(limit_ip), x_timezone_offset: str | None = Header(default=None)
+) -> dict:
+    """Вход по логину и паролю для служебного аккаунта ревьюеров (App Review, Google App access)."""
+    host = request.client.host if request.client else "unknown"
+    _hit("review-login:" + host, 5)
+    if not review_login.credentials_ok(body.login, body.password):
+        log.warning("Неудачный вход ревьюера с %s", host)
+        raise fail(401, "unauthorized", "Неверный логин или пароль")
+    access, refresh, row = login_provider("google", review_login.REVIEW_SUB, review_login.email(), None)
+    mark_reviewer(row["id"])
+    return _session(access, refresh, user_row(row["id"]), x_timezone_offset)
 
 
 @router.post("/auth/refresh")

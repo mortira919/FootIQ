@@ -43,7 +43,11 @@ ANSWERS = [
 
 def parse() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--email", required=True, help="Email тестовой Google-учётки ревьюера")
+    parser.add_argument("--email", help="Email тестовой Google-учётки ревьюера (для --password-login: прежний Gmail, который отвязать)")
+    parser.add_argument(
+        "--password-login", action="store_true",
+        help="Наполнить служебный аккаунт входа по логину и паролю (POST /v1/auth/review), отвязанный от Gmail",
+    )
     parser.add_argument("--name", default="Ревьюер Amplua")
     parser.add_argument("--pro", action="store_true", help="Выдать PRO на год")
     parser.add_argument("--consent", action="store_true", help="Сразу поставить согласие на ИИ-разбор")
@@ -54,6 +58,8 @@ def parse() -> argparse.Namespace:
 
 def main() -> None:
     args = parse()
+    if not args.email and not args.password_login:
+        raise SystemExit("Нужен --email или --password-login")
     if args.db:
         os.environ["FOOTIQ_DB"] = args.db
     os.environ["LLM_PROVIDER"] = ""  # разборы при наполнении ставит запасная рубрика
@@ -67,7 +73,12 @@ def main() -> None:
     from app.main import _hits, app
 
     store.init_db()
-    user_id = reset_reviewer(store, args.email)
+    if args.password_login:
+        from app import review_login
+
+        user_id = reset_login_account(store, review_login.REVIEW_SUB, review_login.email(), args.email)
+    else:
+        user_id = reset_reviewer(store, args.email)
     with store.locked() as connection:
         token, _ = store._issue(connection, user_id)
     headers = {"Authorization": f"Bearer {token}", "X-Timezone-Offset": "180"}
@@ -125,8 +136,9 @@ def main() -> None:
     me = call("GET", "/v1/me")
     summary = {
         "userId": user_id,
-        "email": args.email,
-        "boundToGoogle": bool(store.user_row(user_id)["sub"]),
+        "email": store.user_row(user_id)["email"],
+        "boundToGoogle": bool(store.user_row(user_id)["sub"]) and not args.password_login,
+        "signIn": "логин и пароль (POST /v1/auth/review)" if args.password_login else "Google",
         "elo": me["elo"],
         "sessionsCount": me["sessionsCount"],
         "streak": me["streak"],
@@ -174,6 +186,27 @@ def reset_reviewer(store, email: str) -> str:
             (user_id,),
         )
         return user_id
+
+
+def reset_login_account(store, sub: str, email: str, old_gmail: str | None) -> str:
+    """Служебный аккаунт входа по паролю. Если есть прежний аккаунт ревьюера на Gmail, отвязывает его и берёт себе."""
+    with store.locked() as connection:
+        row = connection.execute("SELECT id FROM users WHERE provider = 'google' AND sub = ?", (sub,)).fetchone()
+        if row is None and old_gmail:
+            row = connection.execute(
+                "SELECT id FROM users WHERE provider = 'google' AND review = 1 AND lower(email) = lower(?)", (old_gmail,)
+            ).fetchone()
+        if row is None:
+            user_id = str(uuid.uuid4())
+            connection.execute(
+                "INSERT INTO users (id, name, provider, sub, email, timezone, country, review) VALUES (?, ?, 'google', ?, ?, '180', 'RU', 1)",
+                (user_id, f"google:{user_id}", sub, email),
+            )
+        else:
+            user_id = row["id"]
+            # Отвязка от Gmail: служебный sub и служебный адрес вместо почты учётки.
+            connection.execute("UPDATE users SET sub = ?, email = ?, review = 1 WHERE id = ?", (sub, email, user_id))
+    return reset_reviewer(store, email)
 
 
 def spread_history(store, user_id: str, dailies: list[str]) -> None:
