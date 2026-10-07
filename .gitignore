@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 *.sqlite
 backend/data/
+
+# Ключи Apple (Sign in with Apple), в репозиторий не коммитить
+*.p8
