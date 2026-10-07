@@ -41,7 +41,7 @@ def _public_url(request: Request) -> str:
 
 
 def page(title: str, body: str, status: int = 200) -> HTMLResponse:
-    support = html.escape(os.environ.get("SUPPORT_EMAIL", "amplua.support@gmail.com"))
+    support = html.escape(os.environ.get("SUPPORT_EMAIL", "support@amplua.app"))
     return HTMLResponse(
         f"""<!doctype html>
 <html lang="ru">

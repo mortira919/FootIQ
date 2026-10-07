@@ -92,7 +92,7 @@ RUSH_LIVES = 3
 RUSH_WINDOW = 210
 LEAGUE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 LEAGUE_CODE = re.compile(f"[{LEAGUE_ALPHABET}]{{6}}")
-SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "amplua.support@gmail.com")
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "support@amplua.app")
 STATUS_CODES = {
     400: "validation_error",
     401: "unauthorized",
