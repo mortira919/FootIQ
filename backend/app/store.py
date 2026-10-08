@@ -881,6 +881,19 @@ def add_report(reporter_id: str, target_type: str, target_id: str, owner_id: str
         return cursor.rowcount == 1
 
 
+def video_attempt_by_reply(user_id: str, reply: str) -> str | None:
+    """id последнего видеоразбора игрока с этой репликой тренера: клиент жалуется на карточку без id попытки."""
+    with connect() as connection:
+        rows = connection.execute(
+            "SELECT id, verdict FROM attempts WHERE user_id = ? AND mode = 'video' AND outcome != 'start' ORDER BY created_at DESC",
+            (user_id,),
+        ).fetchall()
+    for item in rows:
+        if (json.loads(item["verdict"] or "{}").get("review") or {}).get("reply") == reply:
+            return item["id"]
+    return None
+
+
 def attempt_row(attempt_id: str) -> sqlite3.Row | None:
     with connect() as connection:
         return connection.execute("SELECT * FROM attempts WHERE id = ?", (attempt_id,)).fetchone()

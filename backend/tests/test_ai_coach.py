@@ -201,6 +201,22 @@ class AICoach(unittest.TestCase):
             row = connection.execute("SELECT * FROM reports WHERE target_id = ?", (attempt["id"],)).fetchone()
         self.assertEqual((row["reporter_id"], row["target_owner_id"], row["snapshot"]), (owner["user"]["id"], owner["user"]["id"], GOOD_REPLY["reply"]))
 
+    def test_report_coach_card(self):
+        # Контракт клиента: POST /v1/reports/coach {reason, review}, без id попытки; повтор не ошибка.
+        who = self.player()
+        attempt = self.answer(who, text="Смещаюсь в полузащиту и закрываю передачу на опорника")["attempt"]
+        review = attempt["review"]
+        for _ in range(2):
+            self.call("POST", "/v1/reports/coach", who, 204, json={"reason": "offensive", "review": review})
+        offline = dict(review, reply="Реплика, которой нет на сервере")
+        self.call("POST", "/v1/reports/coach", who, 204, json={"reason": "other", "review": offline})
+        self.call("POST", "/v1/reports/coach", who, 400, json={"reason": "rude", "review": review})
+        with connect() as connection:
+            rows = connection.execute("SELECT * FROM reports WHERE reporter_id = ? ORDER BY created_at", (who["user"]["id"],)).fetchall()
+        self.assertEqual([(row["target_type"], row["reason"]) for row in rows], [("review", "offensive_ai"), ("review", "other")])
+        self.assertEqual(rows[0]["target_id"], attempt["id"])
+        self.assertTrue(rows[1]["target_id"].startswith("reply:"))
+
 
 if __name__ == "__main__":
     unittest.main()

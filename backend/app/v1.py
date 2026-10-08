@@ -31,6 +31,7 @@ from app.store import (
     QuotaExceeded,
     add_block,
     add_report,
+    video_attempt_by_reply,
     attempt_row,
     blocked_by,
     blocked_ids,
@@ -954,7 +955,9 @@ def kick_member(league_id: str, user_id: str, row=Depends(player)) -> Response:
 # --- жалобы и блокировки (Apple 1.2, Google UGC и AI-Generated Content) ---
 
 REPORT_TYPES = ("user", "league", "review")
-REPORT_REASONS = ("offensive_name", "offensive_league", "harassment", "cheating", "spam", "harmful_ai", "inaccurate_ai", "other")
+REPORT_REASONS = ("offensive_name", "offensive_league", "harassment", "cheating", "spam", "offensive_ai", "harmful_ai", "inaccurate_ai", "other")
+# Причины из шторки «Что не так с ответом?» → причины в очереди модерации.
+COACH_REASONS = {"offensive": "offensive_ai", "harmful": "harmful_ai", "other": "other"}
 
 
 class ReportIn(Body):
@@ -998,6 +1001,29 @@ def report(body: ReportIn, background: BackgroundTasks, row=Depends(player)) -> 
         background.add_task(
             notify.send, f"Amplua: новая жалоба ({body.targetType}, {body.reason}) на «{snapshot[:120]}». Разобрать за 24 часа: /admin"
         )
+    return Response(status_code=204)
+
+
+class CoachReportIn(Body):
+    reason: Short
+    review: dict
+
+
+@router.post("/reports/coach", status_code=204)
+def report_coach(body: CoachReportIn, background: BackgroundTasks, row=Depends(player)) -> Response:
+    # Жалоба на ответ тренера из карточки разбора. В карточке нет id попытки, поэтому ищем разбор по реплике тренера.
+    reason = COACH_REASONS.get(body.reason)
+    if reason is None:
+        raise invalid("reason: offensive, harmful или other")
+    reply = body.review.get("reply")
+    if not isinstance(reply, str) or not reply.strip() or len(reply) > 5000:
+        raise invalid("review.reply: текст ответа тренера")
+    attempt_id = video_attempt_by_reply(row["id"], reply)
+    # Разбор не нашёлся (например, сделан офлайн): жалобу всё равно принимаем, цель = отпечаток текста.
+    target = attempt_id or "reply:" + hashlib.sha256(reply.encode()).hexdigest()[:32]
+    snapshot = json.dumps(body.review, ensure_ascii=False)[:5000]
+    if add_report(row["id"], "review", target, row["id"], reason, None, snapshot):
+        background.add_task(notify.send, f"Amplua: жалоба на ответ тренера ({reason}): «{reply[:120]}». Разобрать за 24 часа: /admin")
     return Response(status_code=204)
 
 
