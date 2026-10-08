@@ -204,6 +204,21 @@ class Subscription(unittest.TestCase):
             os.environ.pop("REVENUECAT_SECRET_KEY", None)
             os.environ.pop("REVENUECAT_API_URL", None)
 
+    def test_forever_pro_survives_revenuecat(self):
+        # Бессрочный PRO ревьюера: ни сверка, ни события RevenueCat его не снимают.
+        who = self.player()
+        uid = who["user"]["id"]
+        store.set_subscription(uid, store.PRO_FOREVER)
+        self.mock.routes[("GET", f"/v1/subscribers/{uid}")] = (200, {"subscriber": {"entitlements": {}}})
+        os.environ.update({"REVENUECAT_SECRET_KEY": "sk_test", "REVENUECAT_API_URL": self.mock.url + "/v1"})
+        try:
+            self.assertTrue(self.client.post("/v1/me/sync-subscription", headers=who["headers"]).json()["isPro"])
+            self.send(who, "EXPIRATION")
+            self.assertTrue(self.pro(who))
+        finally:
+            os.environ.pop("REVENUECAT_SECRET_KEY", None)
+            os.environ.pop("REVENUECAT_API_URL", None)
+
     def test_sync_without_key_keeps_status(self):
         who = self.player()
         self.assertFalse(self.client.post("/v1/me/sync-subscription", headers=who["headers"]).json()["isPro"])

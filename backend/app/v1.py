@@ -511,7 +511,7 @@ def sync_from_revenuecat(user_id: str) -> bool:
     subscriber = revenuecat.get_subscriber(user_id)
     if subscriber is None:
         return False
-    set_subscription(user_id, revenuecat.pro_until(subscriber))
+    set_subscription(user_id, revenuecat.pro_until(subscriber), keep_forever=True)
     return True
 
 
@@ -1094,9 +1094,9 @@ async def revenuecat_webhook(request: Request, authorization: str | None = Heade
             # Покупка переехала: у прежнего владельца PRO снимаем, новому переносим срок прежнего.
             if source:
                 previous = connection.execute("SELECT pro_until, subscription_tier FROM users WHERE id = ?", (source,)).fetchone()
-                set_subscription(source, None, connection)
+                set_subscription(source, None, connection, keep_forever=True)
                 if target and previous["subscription_tier"] == "pro":
-                    set_subscription(target, previous["pro_until"], connection)
+                    set_subscription(target, previous["pro_until"], connection, keep_forever=True)
 
         fresh = process_rc_event(event_id, kind, ",".join(moved_to), target, apply)
         affected = [user for user in (source, target) if user]
@@ -1109,9 +1109,9 @@ async def revenuecat_webhook(request: Request, authorization: str | None = Heade
             if user_id is None or effect == "ignore":
                 return
             if effect == "revoke":
-                set_subscription(user_id, None, connection)
+                set_subscription(user_id, None, connection, keep_forever=True)
             elif effect == "grant" or (effect == "keep" and until):
-                set_subscription(user_id, until, connection)
+                set_subscription(user_id, until, connection, keep_forever=True)
 
         fresh = process_rc_event(event_id, kind, event.get("app_user_id"), user_id, apply)
         affected = [user_id] if user_id else []

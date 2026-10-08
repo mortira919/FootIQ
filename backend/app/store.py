@@ -1009,14 +1009,24 @@ def log_llm(user_id: str, attempt_id: str | None, provider: str, status: str, du
 # --- подписка PRO (RevenueCat) ---
 
 
-def set_subscription(user_id: str, until: str | None, connection=None) -> None:
-    """until: дата ISO, до которой действует PRO, или None, чтобы снять PRO сейчас."""
+# Бессрочный PRO, выданный вручную (аккаунт ревьюера): сверка с RevenueCat его не снимает.
+PRO_FOREVER = "9999-12-31"
+
+
+def set_subscription(user_id: str, until: str | None, connection=None, keep_forever: bool = False) -> None:
+    """until: дата ISO, до которой действует PRO, или None, чтобы снять PRO сейчас.
+    keep_forever: не трогать игрока с бессрочным PRO (так зовёт сверка с RevenueCat)."""
     tier, value = ("pro", until) if until else ("free", None)
+    sql = "UPDATE users SET subscription_tier = ?, pro_until = ? WHERE id = ?"
+    params = [tier, value, user_id]
+    if keep_forever:
+        sql += " AND COALESCE(pro_until, '') != ?"
+        params.append(PRO_FOREVER)
     if connection is None:
         with connect() as own:
-            own.execute("UPDATE users SET subscription_tier = ?, pro_until = ? WHERE id = ?", (tier, value, user_id))
+            own.execute(sql, params)
     else:
-        connection.execute("UPDATE users SET subscription_tier = ?, pro_until = ? WHERE id = ?", (tier, value, user_id))
+        connection.execute(sql, params)
 
 
 def find_rc_user(candidates: list[str]) -> str | None:

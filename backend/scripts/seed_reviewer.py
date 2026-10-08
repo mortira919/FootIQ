@@ -13,7 +13,7 @@ LLM при наполнении выключена, разборы ставит 
 
 Запуск на сервере:
     flyctl ssh console -a <приложение> -C "python scripts/seed_reviewer.py --email reviewer@gmail.com"
-Флаги: --pro выдаёт PRO на год (для проверки PRO-функций без покупки), --consent сразу ставит согласие на ИИ
+Флаги: --pro выдаёт бессрочный PRO (для проверки PRO-функций без покупки), --consent сразу ставит согласие на ИИ
 (по умолчанию нет: ревьюер должен увидеть экран согласия), --print-token печатает токен доступа на час
 (только не на проде), --db путь к базе (по умолчанию FOOTIQ_DB).
 """
@@ -49,7 +49,7 @@ def parse() -> argparse.Namespace:
         help="Наполнить служебный аккаунт входа по логину и паролю (POST /v1/auth/review), отвязанный от Gmail",
     )
     parser.add_argument("--name", default="Ревьюер Amplua")
-    parser.add_argument("--pro", action="store_true", help="Выдать PRO на год")
+    parser.add_argument("--pro", action="store_true", help="Выдать бессрочный PRO")
     parser.add_argument("--consent", action="store_true", help="Сразу поставить согласие на ИИ-разбор")
     parser.add_argument("--print-token", action="store_true", help="Напечатать токен доступа (не на проде)")
     parser.add_argument("--db", help="Путь к базе SQLite")
@@ -130,7 +130,7 @@ def main() -> None:
             store.join_league(bot, league["code"])
 
     # Итоговое состояние: PRO только по флагу, согласие по умолчанию снимаем.
-    store.set_subscription(user_id, (date.today() + timedelta(days=365)).isoformat() if args.pro else None)
+    store.set_subscription(user_id, store.PRO_FOREVER if args.pro else None)
     store.set_ai_consent(user_id, args.consent)
 
     me = call("GET", "/v1/me")
